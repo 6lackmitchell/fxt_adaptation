@@ -1,0 +1,116 @@
+import numpy as np
+from scipy.io import loadmat
+from scipy.interpolate import RegularGridInterpolator as rgi
+
+def derivative(f,
+               a,
+               method='central',
+               h=1e-3):
+    """Compute the difference formula for f'(a) with step size h.
+
+    Borrowed from UBC Math Deptartment website.
+
+    INPUTS
+    ------
+    f : function
+        Vectorized function of one variable
+    a : number
+        Compute derivative at x = a
+    method : string
+        Difference formula: 'forward', 'backward' or 'central'
+    h : number
+        Step size in difference formula
+
+    OUTPUTS
+    -------
+    float
+        Difference formula:
+            central: f(a+h) - f(a-h))/2h
+            forward: f(a+h) - f(a))/h
+            backward: f(a) - f(a-h))/h
+    """
+    if method == 'central':
+        return (f(a + h) - f(a - h))/(2*h)
+    elif method == 'forward':
+        return (f(a + h) - f(a))/h
+    elif method == 'backward':
+        return (f(a) - f(a - h))/h
+    else:
+        raise ValueError("Method must be 'central', 'forward' or 'backward'.")
+
+def partial_derivative(f,
+                       a,
+                       direction='x',
+                       h=1e-3):
+    """Compute the difference formula for f'(a) with step size h.
+
+    Borrowed from UBC Math Deptartment website.
+
+    INPUTS
+    ------
+    f : function
+        Vectorized function of one variable
+    a : number
+        Compute derivative at x = a
+    method : string
+        Difference formula: 'forward', 'backward' or 'central'
+    h : number
+        Step size in difference formula
+
+    OUTPUTS
+    -------
+    float
+        Difference formula:
+            central: f(a+h) - f(a-h))/2h
+            forward: f(a+h) - f(a))/h
+            backward: f(a) - f(a-h))/h
+    """
+    if direction == 'x':
+        hnew = np.array([h, 0.0, 0.0])
+    elif direction == 'y':
+        hnew = np.array([0.0, h, 0.0])
+    elif direction == 'z':
+        hnew = np.array([0.0, 0.0, h])
+    else:
+        raise ValueError("Direction must be 'x', 'y' or 'z'.")
+    return (f(a + hnew) - f(a - hnew))/(2*h)
+
+wind_file = loadmat('/home/dasc/MB/Code/FxT_AdaptationLaw_ParametricUncertainty/wind_data/wind_data.mat')
+wind_u    = wind_file['u2']
+wind_v    = wind_file['v2']
+wind_w    = wind_file['w2']
+
+# Scale the winds
+SCALE = 1.
+
+# Configure wind mesh
+xlim      = 3.5
+ylim      = 3.5
+zlim      = 3.5
+xx        = np.linspace(-xlim,xlim,wind_u.shape[0])
+yy        = np.linspace(-ylim,ylim,wind_v.shape[1])
+zz        = np.linspace( -0.2,zlim,wind_w.shape[2])
+
+# Configure Wind Interpolating Functions
+windu_interp = rgi((xx,yy,zz),wind_u / SCALE)
+windv_interp = rgi((xx,yy,zz),wind_v / SCALE)
+windw_interp = rgi((xx,yy,zz),wind_w / SCALE)
+
+# Configure Wind Partial Derivatives
+windu_diffx = lambda x: partial_derivative(windu_interp,x,'x')
+windu_diffy = lambda x: partial_derivative(windu_interp,x,'y')
+windu_diffz = lambda x: partial_derivative(windu_interp,x,'z')
+windv_diffx = lambda x: partial_derivative(windv_interp,x,'x')
+windv_diffy = lambda x: partial_derivative(windv_interp,x,'y')
+windv_diffz = lambda x: partial_derivative(windv_interp,x,'z')
+windw_diffx = lambda x: partial_derivative(windw_interp,x,'x')
+windw_diffy = lambda x: partial_derivative(windw_interp,x,'y')
+windw_diffz = lambda x: partial_derivative(windw_interp,x,'z')
+
+if __name__ == "__main__":
+    print(np.max(abs(wind_u)))
+    print(np.max(abs(wind_v)))
+    print(np.max(abs(wind_w)))
+    # aa = np.array([1,1,1])
+    # print((windu_interp(aa+0.01) - windu_interp(aa-0.01)) / (2*0.01))
+    # print(windu_diff(aa))
