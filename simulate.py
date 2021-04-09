@@ -5,14 +5,30 @@
 ### Import Statements ###
 # General imports
 import os
+import sys
 import pickle
 import traceback
 
+# Determine which problem we are solving
+args = sys.argv
+if len(args) > 1:
+    config = str(args[1])
+else:
+    config = 'simple'
+
+# Make problem config available to other modules
+import builtins
+builtins.ecc_MODEL_CONFIG = config
+
 # Problem specific imports
-from quadrotor_settings import *
-# from estimator import adaptation_law
-from estimator_04072021 import adaptation_law
-from quadrotor_qp_controller import solve_qp
+if config == 'simple':
+    from simple_settings import *
+    from simple_qp_controller import solve_qp
+elif config == 'quadrotor':
+    from quadrotor_settings import *
+    from quadrotor_qp_controller import solve_qp
+
+from estimator import adaptation_law
 
 # Authorship information
 __author__     = "Mitchell Black"
@@ -32,6 +48,7 @@ u             = np.zeros((nTimesteps,nControls))
 # p             = np.zeros((nTimesteps,nFeasibilityParams))
 xhat          = np.zeros((nTimesteps,nStates))
 thetahat      = np.zeros((nTimesteps,nParams))
+thetainv      = np.zeros((nTimesteps,nParams))
 qp_sol        = np.zeros((nTimesteps,nSols))
 nominal_sol   = np.zeros((nTimesteps,nSols))
 cbfs          = np.zeros((nTimesteps,nCBFs))
@@ -49,7 +66,7 @@ try:
             print("Time: {} sec".format(tt))
 
         # Compute new parameter estimate
-        thetahat[ii],errMax,etaTerms,Gamma,state_f = adaptation_law(dt,tt,x[ii],u)
+        thetahat[ii],errMax,etaTerms,Gamma,state_f,thetainv[ii] = adaptation_law(dt,tt,x[ii],u)
 
         # Compute Control Input
         qp_sol[ii,:],nominal_sol[ii,:] = solve_qp({'t':        tt,
@@ -84,6 +101,7 @@ finally:
             'sols':qp_sol,
             'sols_nom':nominal_sol,
             'thetahat':thetahat,
+            'thetainv':thetainv,
             'cbf':cbfs,
             'clf':clf,
             'xf':xf,

@@ -3,6 +3,9 @@ import sys
 args = sys.argv
 if len(args) > 1:
     config = str(args[1])
+    if len(args) > 2:
+        import builtins
+        builtins.VIS_FILE = str(args[2])
 else:
     config = 'simple'
 

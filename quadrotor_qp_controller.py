@@ -255,7 +255,7 @@ def get_nominal_acceleration(tt:       float,
     if z > 1.0 or (theta < -np.pi/2 and TT0 is not None):
         if TT0 is None:
             TT0 = tt
-        if tt > 10.0:
+        if tt > 10.64:
 
         # if theta < -np.pi/2 and theta > -7*np.pi/8:
         #     # z_c = 0.0

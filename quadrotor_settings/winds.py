@@ -5,7 +5,7 @@ from scipy.interpolate import RegularGridInterpolator as rgi
 def derivative(f,
                a,
                method='central',
-               h=1e-3):
+               h=1e-2):
     """Compute the difference formula for f'(a) with step size h.
 
     Borrowed from UBC Math Deptartment website.
@@ -41,7 +41,7 @@ def derivative(f,
 def partial_derivative(f,
                        a,
                        direction='x',
-                       h=1e-3):
+                       h=1e-2):
     """Compute the difference formula for f'(a) with step size h.
 
     Borrowed from UBC Math Deptartment website.
@@ -84,9 +84,9 @@ wind_w    = wind_file['w2']
 SCALE = 1.
 
 # Configure wind mesh
-xlim      = 3.5
-ylim      = 3.5
-zlim      = 3.5
+xlim      = 5.0
+ylim      = 5.0
+zlim      = 5.0
 xx        = np.linspace(-xlim,xlim,wind_u.shape[0])
 yy        = np.linspace(-ylim,ylim,wind_v.shape[1])
 zz        = np.linspace( -0.2,zlim,wind_w.shape[2])
@@ -96,21 +96,7 @@ windu_interp = rgi((xx,yy,zz),wind_u / SCALE)
 windv_interp = rgi((xx,yy,zz),wind_v / SCALE)
 windw_interp = rgi((xx,yy,zz),wind_w / SCALE)
 
-# Configure Wind Partial Derivatives
-windu_diffx = lambda x: partial_derivative(windu_interp,x,'x')
-windu_diffy = lambda x: partial_derivative(windu_interp,x,'y')
-windu_diffz = lambda x: partial_derivative(windu_interp,x,'z')
-windv_diffx = lambda x: partial_derivative(windv_interp,x,'x')
-windv_diffy = lambda x: partial_derivative(windv_interp,x,'y')
-windv_diffz = lambda x: partial_derivative(windv_interp,x,'z')
-windw_diffx = lambda x: partial_derivative(windw_interp,x,'x')
-windw_diffy = lambda x: partial_derivative(windw_interp,x,'y')
-windw_diffz = lambda x: partial_derivative(windw_interp,x,'z')
-
 if __name__ == "__main__":
     print(np.max(abs(wind_u)))
     print(np.max(abs(wind_v)))
     print(np.max(abs(wind_w)))
-    # aa = np.array([1,1,1])
-    # print((windu_interp(aa+0.01) - windu_interp(aa-0.01)) / (2*0.01))
-    # print(windu_diff(aa))

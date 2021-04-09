@@ -12,6 +12,7 @@ import gurobipy as gp
 import matplotlib.pyplot as plt
 from matplotlib import rcParams, cycler
 from matplotlib.lines import Line2D
+from matplotlib.ticker import MaxNLocator
 from mpl_toolkits import mplot3d
 import pandas as pd
 
@@ -52,7 +53,11 @@ sols      = np.zeros(((int(tf/dt)+1),nControl,5))
 theta_hat = np.zeros(((int(tf/dt)+1),nControl,2))
 cbf_val   = np.zeros(((int(tf/dt)+1),nControl,2))
 
-filename = filepath + 'NEW_ESTIMATOR.pkl'
+import builtins
+if hasattr(builtins,"VIS_FILE"):
+    filename = filepath + builtins.VIS_FILE + '.pkl'
+else:
+    filename = filepath + 'money_set/MONEY_DATASET.pkl'
 
 with open(filename,'rb') as f:
     try:
@@ -63,6 +68,7 @@ with open(filename,'rb') as f:
         sols      = data['sols']
         sols_nom  = data['sols_nom']
         theta_hat = data['thetahat']
+        theta_inv = data['thetainv']
         cbf_val   = data['cbf']
         clf_val   = data['clf']
         xf        = data['xf']
@@ -310,6 +316,8 @@ if False:
         # ax4a_inset.plot(t[:ii],np.clip(psi_hat[:ii,tay,0,1],-10,10),'-.',label=r'$\hat\theta _{1,h_2,TAY}$',color=colors[tay],linewidth=lwidth)
         ax4a_inset.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),label=r'$\theta _{1,PRO}$',linewidth=lwidth)
         ax4a_inset.plot(T_fixed,theta[0],'gd',label='Fixed-Time',markersize=10)
+        ax4a_inset.xaxis.set_major_locator(MaxNLocator(5))
+        ax4a_inset.yaxis.set_major_locator(MaxNLocator(2))
         ax4a_inset.set_xlim(0.75,1.25)
         ax4a_inset.set_ylim(theta[0] - 0.1,theta[0] + 0.1)
         # ax4a_inset.xaxis.tick_top()
@@ -319,7 +327,7 @@ if False:
         ax4a_inset.set_xticks(ax4a_inset.get_xticks().tolist())
         # ax4a_inset.set_xticklabels(["    0.75",None,1.0,None,1.25,None])
         ax4a_inset.set_yticks(ax4a_inset.get_yticks().tolist())
-        ax4a_inset.set_yticklabels([theta[0]-0.1,None,theta[0],None,theta[0]+0.1])
+        # ax4a_inset.set_yticklabels([theta[0]-0.1,None,theta[0],None,theta[0]+0.1])
 
         ax4a_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
         # ax4a_inset.set_yticklabels([None,-1.00,-0.95])
@@ -433,6 +441,10 @@ else:
     # plt.close('all')
     T_fixed = 1.0
     c1 = 'r'; c2 = 'c'; c3 = 'm'
+    # Teal, Coral, Khaki
+    c1 = '#029386'; c2 = '#FC5A50'; c3 = '#AAA662'
+    # Azure, Cyan, Indigo
+    c4 = '#069AF3'; c5 = '#00FFFF'; c6 = '#4B0082'
 
     fig6, ax4 = plt.subplots(1,1,figsize=(8,8))
     ax4.spines['bottom'].set_color('#000000')
@@ -445,89 +457,110 @@ else:
     ax4.plot(T_fixed,theta[2],'gd',markersize=10)
     ax4.plot(t[:ii],-thetaMax[0]*np.ones((ii,)),label=r'$\theta _{bounds}$',linewidth=lwidth+4,color='k')
     ax4.plot(t[:ii],thetaMax[0]*np.ones((ii,)),linewidth=lwidth+4,color='k')
-    ax4.plot(t[:ii],theta[0]*np.ones((ii,)),label=r'$\theta _{1,true}$',color=c1,linewidth=lwidth+2,dashes=dash)
-    ax4.plot(t[:ii],theta[1]*np.ones((ii,)),label=r'$\theta _{2,true}$',color=c2,linewidth=lwidth+2,dashes=dash)
-    ax4.plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{3,true}$',color=c3,linewidth=lwidth+2,dashes=dash)
-    ax4.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),label=r'$\hat\theta _{1,PRO}$',linewidth=lwidth,color=c1)
-    ax4.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth+1,color=c2)
-    ax4.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth+1,color=c3)
+    ax4.plot(t[:ii],theta[0]*np.ones((ii,)),label=r'$\theta _{1,true}$',color=c1,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],theta[1]*np.ones((ii,)),label=r'$\theta _{2,true}$',color=c2,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{3,true}$',color=c3,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),label=r'$\hat\theta _{1,PRO}$',linewidth=lwidth+1,color=c4)
+    ax4.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth+1,color=c5)
+    ax4.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth+1,color=c6)
+    # ax4.plot(t[:ii],np.clip(theta_inv[:ii,0],-thetaMax[0],thetaMax[0]),':',label=r'$\hat\theta _{1,PRO}$',linewidth=lwidth+1)#,color=c1)
+    # ax4.plot(t[:ii],np.clip(theta_inv[:ii,1],-thetaMax[1],thetaMax[1]),':',label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth+1)#,color=c2)
+    # ax4.plot(t[:ii],np.clip(theta_inv[:ii,2],-thetaMax[2],thetaMax[2]),':',label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth+1)#,color=c3)
+
 
     # ax4[0].plot(t[:ii],np.clip(theta_hat[:ii,lsm,0],-10,10),label=r'$\hat\theta _{1,LSM}$',color=colors[lsm],linewidth=lwidth)
     # ax4[0].plot(t[:ii],np.clip(psi_hat[:ii,tay,0,0],-10,10),':',label=r'$\hat\theta _{1,h_1,TAY}$',color=colors[tay],linewidth=lwidth)
     # ax4[0].plot(t[:ii],np.clip(psi_hat[:ii,tay,0,1],-10,10),'-.',label=r'$\hat\theta _{1,h_2,TAY}$',color=colors[tay],linewidth=lwidth)
-    ax4.legend(fancybox=True,markerscale=15)
-    ax4.set(ylabel=r'$\theta$',xlim=[-0.1,ii*dt+0.75],ylim=[-thetaMax[0]-0.5,thetaMax[0]+0.5])
-    ax4.set_xticklabels([])
+    ax4.legend(fancybox=True,markerscale=15,fontsize=25)
+    ax4.set(xlabel='Time (sec)',ylabel=r'$\theta$',xlim=[-0.1,ii*dt+4],ylim=[-thetaMax[0]-0.5,thetaMax[0]+0.5])
+    for item in ([ax4.title, ax4.xaxis.label, ax4.yaxis.label] +
+                     ax4.get_xticklabels() + ax4.get_yticklabels()):
+            item.set_fontsize(25)
+    # ax4.set_xticklabels([])
     ax4.grid(True,linestyle='dotted',color='white')
 
     if ii*dt > 1.0:
         ax4a_inset = inset_axes(ax4,width="100%",height="100%",
-                              bbox_to_anchor=(.35, .44, .3, .1),bbox_transform=ax4.transAxes, loc=3)
+                              bbox_to_anchor=(.45, .6, .3, .1),bbox_transform=ax4.transAxes, loc=3)
+                              # bbox_to_anchor=(.35, .44, .3, .1),bbox_transform=ax4.transAxes, loc=3)
         ax4a_inset.spines['bottom'].set_color('#000000')
         ax4a_inset.spines['top'].set_color('#000000')
         ax4a_inset.spines['right'].set_color('#000000')
         ax4a_inset.spines['left'].set_color('#000000')
         ax4a_inset.plot(t[:ii],theta[0]*np.ones((ii,)),color=c1,linewidth=lwidth+3,dashes=dash)
-        ax4a_inset.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),linewidth=lwidth-1,color=c1)
+        ax4a_inset.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),linewidth=lwidth+1,color=c4)
+        # ax4a_inset.plot(t[:ii],np.clip(theta_inv[:ii,0],-thetaMax[0],thetaMax[0]),':',linewidth=lwidth-1)#,color=c1)
         ax4a_inset.plot(T_fixed,theta[0],'gd',label='Fixed-Time',markersize=10)
-        ax4a_inset.set_xlim(T_fixed-0.25,T_fixed+0.25)
-        ax4a_inset.set_ylim(theta[0] - 0.1,theta[0] + 0.1)
+        ax4a_inset.xaxis.set_major_locator(MaxNLocator(5))
+        ax4a_inset.yaxis.set_major_locator(MaxNLocator(2))
+        ax4a_inset.set_xlim(T_fixed-0.1,T_fixed+0.1)
+        ax4a_inset.set_ylim(theta[0] - 0.05,theta[0] + 0.05)
+        ax4a_inset.xaxis.tick_top()
         ax4a_inset.yaxis.tick_right()
         for item in ([ax4a_inset.title, ax4a_inset.xaxis.label, ax4a_inset.yaxis.label] +
                      ax4a_inset.get_xticklabels() + ax4a_inset.get_yticklabels()):
-            item.set_fontsize(12)
+            item.set_fontsize(18)
         ax4a_inset.set_xticks(ax4a_inset.get_xticks().tolist())
-        ax4a_inset.set_yticks(ax4a_inset.get_yticks().tolist())
-        ax4a_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
-        ax4a_inset.set_yticklabels([None,np.round(theta[0]-0.05,2),None,None,theta[0],None,None,theta[0]+0.05,None])
+        # ax4a_inset.set_yticks(ax4a_inset.get_yticks().tolist())
+        # ax4a_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
+        # ax4a_inset.set_yticklabels([None,np.round(theta[0]-0.05,2),None,None,theta[0],None,None,theta[0]+0.05,None])
+        # ax4a_inset.get_yaxis().set_visible(False)
         ax4a_inset.grid(True,linestyle='dotted',color='white')
-        mark_inset(ax4,ax4a_inset,loc1=3,loc2=1,fc="none",ec="0.2",lw=1.5)#,ls="--")
-        
+        mark_inset(ax4,ax4a_inset,loc1=4,loc2=2,fc="none",ec="0.2",lw=1.5)#,ls="--")
+
         ax4b_inset = inset_axes(ax4,width="100%",height="100%",
-                              bbox_to_anchor=(.15, .2, .3, .1),bbox_transform=ax4.transAxes, loc=3)
+                              bbox_to_anchor=(.2, .2, .3, .1),bbox_transform=ax4.transAxes, loc=3)
         ax4b_inset.spines['bottom'].set_color('#000000')
         ax4b_inset.spines['top'].set_color('#000000')
         ax4b_inset.spines['right'].set_color('#000000')
         ax4b_inset.spines['left'].set_color('#000000')
-        ax4b_inset.plot(t[:ii],theta[1]*np.ones((ii,)),color=c2,linewidth=lwidth+2,dashes=dash)
-        ax4b_inset.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),linewidth=lwidth,color=c2)
+        ax4b_inset.plot(t[:ii],theta[1]*np.ones((ii,)),color=c2,linewidth=lwidth+3,dashes=dash)
+        ax4b_inset.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),linewidth=lwidth+1,color=c5)
+        # ax4b_inset.plot(t[:ii],np.clip(theta_inv[:ii,1],-thetaMax[1],thetaMax[1]),':',linewidth=lwidth)#,color=c2)
         ax4b_inset.plot(T_fixed,theta[1],'gd',label='Fixed-Time',markersize=10)
-        ax4b_inset.set_xlim(T_fixed-0.25,T_fixed+0.25)
-        ax4b_inset.set_ylim(theta[1] - 0.1,theta[1] + 0.1)
+        ax4b_inset.xaxis.set_major_locator(MaxNLocator(5))
+        ax4b_inset.yaxis.set_major_locator(MaxNLocator(2))
+        ax4b_inset.set_xlim(T_fixed-0.1,T_fixed+0.1)
+        ax4b_inset.set_ylim(theta[1] - 0.05,theta[1] + 0.05)
         ax4b_inset.yaxis.tick_right()
         for item in ([ax4b_inset.title, ax4b_inset.xaxis.label, ax4b_inset.yaxis.label] +
                      ax4b_inset.get_xticklabels() + ax4b_inset.get_yticklabels()):
-            item.set_fontsize(12)
+            item.set_fontsize(18)
         ax4b_inset.set_xticks(ax4b_inset.get_xticks().tolist())
-        ax4b_inset.set_yticks(ax4b_inset.get_yticks().tolist())
-        ax4b_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
-        ax4b_inset.set_yticklabels([None,np.round(theta[1]-0.05,2),None,None,theta[1],None,None,theta[1]+0.05,None])
+        # ax4b_inset.set_yticks(ax4b_inset.get_yticks().tolist())
+        # ax4b_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
+        # ax4b_inset.set_yticklabels([None,np.round(theta[1]-0.05,2),None,None,theta[1],None,None,theta[1]+0.05,None])
+        # ax4b_inset.get_yaxis().set_visible(False)
         ax4b_inset.grid(True,linestyle='dotted',color='white')
         mark_inset(ax4,ax4b_inset,loc1=3,loc2=1,fc="none",ec="0.2",lw=1.5)#,ls="--")
-        
+
         ax4c_inset = inset_axes(ax4,width="100%",height="100%",
-                              bbox_to_anchor=(.15, .7, .3, .1),bbox_transform=ax4.transAxes, loc=3)
+                              bbox_to_anchor=(.1, .75, .3, .1),bbox_transform=ax4.transAxes, loc=3)
         ax4c_inset.spines['bottom'].set_color('#000000')
         ax4c_inset.spines['top'].set_color('#000000')
         ax4c_inset.spines['right'].set_color('#000000')
         ax4c_inset.spines['left'].set_color('#000000')
-        ax4c_inset.plot(t[:ii],theta[2]*np.ones((ii,)),color=c3,linewidth=lwidth+2,dashes=dash)
-        ax4c_inset.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),linewidth=lwidth,color=c3)
+        ax4c_inset.plot(t[:ii],theta[2]*np.ones((ii,)),color=c3,linewidth=lwidth+3,dashes=dash)
+        ax4c_inset.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),linewidth=lwidth+1,color=c6)
+        # ax4c_inset.plot(t[:ii],np.clip(theta_inv[:ii,2],-thetaMax[2],thetaMax[2]),':',linewidth=lwidth)#,color=c3)
         ax4c_inset.plot(T_fixed,theta[2],'gd',label='Fixed-Time',markersize=10)
-        ax4c_inset.set_xlim(T_fixed-0.25,T_fixed+0.25)
-        ax4c_inset.set_ylim(theta[2] - 0.1,theta[2] + 0.1)
+        ax4c_inset.xaxis.set_major_locator(MaxNLocator(5))
+        ax4c_inset.yaxis.set_major_locator(MaxNLocator(2))
+        ax4c_inset.set_xlim(T_fixed-0.1,T_fixed+0.1)
+        ax4c_inset.set_ylim(theta[2] - 0.05,theta[2] + 0.05)
         ax4c_inset.xaxis.tick_top()
         ax4c_inset.yaxis.tick_right()
         for item in ([ax4c_inset.title, ax4c_inset.xaxis.label, ax4c_inset.yaxis.label] +
                      ax4c_inset.get_xticklabels() + ax4c_inset.get_yticklabels()):
-            item.set_fontsize(12)
+            item.set_fontsize(18)
         ax4c_inset.set_xticks(ax4c_inset.get_xticks().tolist())
-        ax4c_inset.set_yticks(ax4c_inset.get_yticks().tolist())
-        ax4c_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
-        ax4c_inset.set_yticklabels([None,np.round(theta[2]-0.05,2),None,None,theta[2],None,None,theta[2]+0.05,None])
+        # ax4c_inset.set_yticks(ax4c_inset.get_yticks().tolist())
+        # ax4c_inset.set_xticklabels([None,0.75,None,1.0,None,1.25,None])
+        # ax4c_inset.set_yticklabels([None,np.round(theta[2]-0.05,2),None,None,theta[2],None,None,theta[2]+0.05,None])
+        # ax4c_inset.get_yaxis().set_visible(False)
         ax4c_inset.grid(True,linestyle='dotted',color='white')
         mark_inset(ax4,ax4c_inset,loc1=2,loc2=4,fc="none",ec="0.2",lw=1.5)#,ls="--")
-        
+
         plt.draw()
 
 plt.show()

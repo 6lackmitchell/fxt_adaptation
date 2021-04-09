@@ -3,22 +3,22 @@ import copy
 import time
 import numpy as np
 
-from quadrotor_settings import *
+# from quadrotor_settings import *
 
-# import builtins
-# if hasattr(builtins,"ecc_MODEL_CONFIG"):
-#     FOLDER = builtins.ecc_MODEL_CONFIG
-# else:
-#     FOLDER = 'simple'
+import builtins
+if hasattr(builtins,"ecc_MODEL_CONFIG"):
+    FOLDER = builtins.ecc_MODEL_CONFIG
+else:
+    FOLDER = 'simple'
 
-# if FOLDER == 'overtake':
-#     from overtake_settings import *
-# elif FOLDER == 'simple':
-#     from simple_settings import *
-# elif FOLDER == 'simple2ndorder':
-#     from simple2ndorder_settings import *
-# elif FOLDER == 'quadrotor':
-#     from quadrotor_settings import *
+if FOLDER == 'overtake':
+    from overtake_settings import *
+elif FOLDER == 'simple':
+    from simple_settings import *
+elif FOLDER == 'simple2ndorder':
+    from simple2ndorder_settings import *
+elif FOLDER == 'quadrotor':
+    from quadrotor_settings import *
 
 ###############################################################################
 ##################### FxT Parameter Estimation Parameters #####################
@@ -42,11 +42,13 @@ mu_e      = 2
 c1_e      = 4
 c2_e      = 4
 k_e       = 0.0002
-l_e       = 350
+l_e       = 25.0
 gamma1_e  = 1 - 1/mu_e
 gamma2_e  = 1 + 1/mu_e
 T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
 kG        = 1.1 # Must be greater than 1
+Kw        = 165
+# Kw        = 1.0
 
 ###############################################################################
 ################################## Functions ##################################
@@ -73,41 +75,60 @@ class Estimator():
         arg2 = np.sqrt(c1_e)
         return mu_e / np.sqrt(c1_e*c2_e) * np.arctan2(arg1,arg2)
 
+    @property
+    def e(self):
+        """ State Prediction Error """
+        # print("x:  {}".format(self.x))
+        # print("xh: {}".format(self.xHat))
+        return self.x - self.xHat
+
     def __init__(self):
-        pass
+        self.dt       = None
+        self.x        = None
+        self.xhat     = None
+        self.thetaHat = None
+        self.theta    = None
+        self.thetaMax = None
+        self.thetaMin = None
 
     def set_initial_conditions(self,**settings):
         """ """
         # Set Default Initial Conditions
         self.dt       = dt
         self.x        = x0
+        self.xHat     = x0
         self.thetaHat = thetaHat
         self.thetaMax = thetaMax
         self.thetaMin = thetaMin
 
         if 'x0' in settings.keys():
             assert type(settings['x0']) == np.ndarray
-            self.x = settings['x0']
+            self.x    = settings['x0']
+            self.xHat = settings['x0']
 
         if 'x' in settings.keys():
             assert type(settings['x']) == np.ndarray
-            self.x = settings['x']
+            self.x    = settings['x']
+            self.xHat = settings['x']
 
         if 'thetaHat0' in settings.keys():
             assert type(settings['thetaHat0']) == np.ndarray
             self.thetaHat = settings['thetaHat0']
+            self.theta    = settings['thetaHat0']
             if 'psi_hat0' not in settings.keys() and 'psi_est0' not in settings.keys():
                 self.psi_hat = settings['thetaHat0']
 
         if 'th' in settings.keys():
             assert type(settings['thetaHat0']) == np.ndarray
             self.thetaHat = settings['th']
+            self.theta    = settings['th']
             if 'psi_hat0' not in settings.keys() and 'psi_est0' not in settings.keys():
                 self.psi_hat = settings['th']
 
         if 'theta_est0' in settings.keys():
             assert type(settings['thetaHat0']) == np.ndarray
             self.thetaHat = settings['theta_est0']
+            self.theta    = settings['theta_est0']
             if 'psi_hat0' not in settings.keys() and 'psi_est0' not in settings.keys():
                 self.psi_hat = settings['theta_est0']
 
@@ -162,6 +183,9 @@ class Estimator():
         self.Vmax      = self.V0
         self.eta       = self.Vmax
 
+        self.W         = np.zeros(regressor(self.x).shape)
+        self.xi        = self.e
+
         # Alternate technique when unknown parameters appear in multiple stages of dynamics
         # reg_depth      = 3
         # reg            = reg_est(self.x,self.thetaHat)[:reg_depth]
@@ -196,57 +220,71 @@ class Estimator():
         self.x = x
         self.u = u
 
+        if t == 0:
+            return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta
+
         # Update Unknown Parameter Estimates
         self.update_unknown_parameter_estimates(law=2)
+
+        # Update state estimate using observer dynamics
+        self.update_observer()
 
         # Update theta_tilde upper/lower bounds
         self.update_error_bounds(self.t)
 
-        return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xf
+        return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta
 
-    def update_filter_2ndOrder(self):
+    def update_unknown_parameter_estimates(self,law=1):
         """
-        Updates 2nd-order state filtering scheme according to 1st-order Euler
-        derivative approximations.
-
-        INPUTS:
-        None
-
-        OUTPUTS:
-        None
-
         """
-        # Second-Order Filter
-        self.xf_dot   = self.xf_dot   + (self.dt * xf_2dot(self.x,self.xf,self.xf_dot,k_e))
-        self.phif_dot = self.phif_dot + (self.dt * phif_2dot(self.x,self.u,self.phif,self.phif_dot,k_e))
-        self.Phif_dot = self.Phif_dot + (self.dt * Phif_2dot(regressor(self.x),self.Phif,self.Phif_dot,k_e))
-        # self.Phif_dot = self.Phif_dot + (self.dt * Phif_2dot(reg_est(self.x,self.thetaHat)[0:self.Phif.shape[0]],self.Phif,self.Phif_dot,k_e))
+        tol = 0#1e-15
+        # self.update_filter_2ndOrder()
 
-        self.xf   = self.xf   + (self.dt * self.xf_dot)
-        self.phif = self.phif + (self.dt * self.phif_dot)
-        self.Phif = self.Phif + (self.dt * self.Phif_dot)
+        eig = self.update_auxiliaries()
+        if eig <= 0:
+            # return
+            raise ValueError('PE Condition Not Met: Eig(P) = {:.3f}'.format(eig))
 
-    def update_filter_1stOrder(self):
-        """
-        Updates 2nd-order state filtering scheme according to 1st-order Euler
-        derivative approximations.
+        # General Quantities
+        # W    = self.P @ self.thetaHat - self.Q
+        # Pinv = np.linalg.inv(self.P)
 
-        INPUTS:
-        None
 
-        OUTPUTS:
-        None
+        # New relationship: e = W\Tilde{\theta}
+        W      =  self.e
+        self.P = -self.W
 
-        """
 
-        # First-Order Filter
-        self.xf_dot   = (self.x - self.xf) / k_e
-        self.phif_dot = (f(self.x) + np.dot(g(self.x),self.u) - self.phif) / k_e
-        self.Phif_dot = (regressor(self.x) - self.Phif) / k_e
+        if law == 1:
+            # Adaptation Law 1
+            pre  = self.Gamma @ W / (W.T @ Pinv.T @ W)
+            V    = (1/2 * W.T @ Pinv.T @ np.linalg.inv(self.Gamma) @ Pinv @ W)
+            self.thetaHatDot = pre * (-c1_e * V**gamma1_e - c2_e * V**gamma2_e)
 
-        self.xf   = self.xf   + (self.dt * self.xf_dot)
-        self.phif = self.phif + (self.dt * self.phif_dot)
-        self.Phif = self.Phif + (self.dt * self.Phif_dot)
+        elif law == 2:
+            if np.linalg.norm(W) < 1e-15:
+                return
+            # Adaptation Law 2
+            pre  = -self.Gamma / (np.linalg.norm(W))
+            self.thetaHatDot = pre @ (self.P.T @ W + self.P.T @ W * (W.T @ W))
+
+            norm_chk = np.linalg.norm(W)
+            if np.isnan(norm_chk) or np.isinf(norm_chk) or norm_chk == 0:
+                print("ThetaHat: {}".format(self.thetaHat))
+                raise ValueError("W Norm Zero")
+
+        thd_norm      = np.linalg.norm(self.thetaHatDot)
+        if thd_norm >= tol and not (np.isnan(thd_norm) or np.isinf(thd_norm)):
+            self.thetaHat = self.thetaHat + (self.dt * self.thetaHatDot)
+            self.thetaHat = np.clip(self.thetaHat,self.thetaMin,self.thetaMax)
+        else:
+            print("P: {}".format(self.P))
+            print("Q: {}".format(self.Q))
+            print("W: {}".format(W))
+            print("No Theta updated")
+            print("Pre  = {}\nTime = {}sec".format(pre,self.t))
+
+        # self.theta     = Pinv @ self.Q
 
     def update_auxiliaries(self):
         """ Updates the auxiliary matrix and vector for the filtering scheme.
@@ -258,11 +296,24 @@ class Estimator():
         float -- minimum eigenvalue of P matrix
 
         """
-        Pdot = -l_e * self.P + np.dot(self.Phif.T,self.Phif)
-        Qdot = -l_e * self.Q + np.dot(self.Phif.T,(self.xf_dot - self.phif))
+        Wdot   = -Kw * self.W + regressor(self.x)
+        # xi_dot = -Kw * self.xi
 
-        self.P = self.P + (self.dt * Pdot)
-        self.Q = self.Q + (self.dt * Qdot)
+        self.W  = self.W  + (self.dt * Wdot)
+        # self.xi = self.xi + (self.dt * xi_dot)
+
+        # Pdot = -l_e * self.P + np.dot(self.W.T,self.W)
+        # Qdot = -l_e * self.Q + np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+
+        # Pdot = np.dot(self.W.T,self.W)
+        # Qdot = np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+
+        # print("W:  {}".format(self.W))
+        # print("e:  {}".format(self.e))
+        # print("xi: {}".format(self.xi))
+
+        # self.P = self.P + (self.dt * Pdot)
+        # self.Q = self.Q + (self.dt * Qdot)
 
         norm_chk = np.linalg.norm(self.P)
         if np.isnan(norm_chk) or np.isinf(norm_chk):
@@ -272,49 +323,24 @@ class Estimator():
         if np.isnan(norm_chk) or np.isinf(norm_chk):
             raise ValueError("Q Norm out of bounds")
 
-        return np.min(np.linalg.eig(self.P)[0])
+        return 1#np.min(np.linalg.eig(self.P)[0])
 
-    def update_unknown_parameter_estimates(self,law=1):
+    def update_observer(self):
+        """ Updates the state estimate according to the observer (xhat) dynamics.
+
+        INPUTS
+        ------
+        None
+
+        OUTPUTS
+        -------
+        None
+
         """
-        """
-        tol = 0#1e-15
-        self.update_filter_2ndOrder()
-        eig = self.update_auxiliaries()
-        if eig <=0:
-            return
-            raise ValueError('PE Condition Not Met: Eig(P) = {:.3f}'.format(eig))
-
-        # General Quantities
-        W    = self.P @ self.thetaHat - self.Q
-        Pinv = np.linalg.inv(self.P)
-
-        if law == 1:
-            # Adaptation Law 1
-            pre  = self.Gamma @ W / (W.T @ Pinv.T @ W)
-            V    = (1/2 * W.T @ Pinv.T @ np.linalg.inv(self.Gamma) @ Pinv @ W)
-            thetaHat_dot = pre * (-c1_e * V**gamma1_e - c2_e * V**gamma2_e)
-
-        elif law == 2:
-            # Adaptation Law 2
-            pre  = -self.Gamma / (np.linalg.norm(W))
-            thetaHat_dot = pre @ (self.P.T @ W + self.P.T @ W * (W.T @ W))
-
-            norm_chk = np.linalg.norm(W)
-            if np.isnan(norm_chk) or np.isinf(norm_chk):
-                print("ThetaHat: {}".format(self.thetaHat))
-                raise ValueError("W Norm Zero")
-
-        thd_norm      = np.linalg.norm(thetaHat_dot)
-        if thd_norm >= tol and not (np.isnan(thd_norm) or np.isinf(thd_norm)):
-            self.thetaHat = self.thetaHat + (self.dt * thetaHat_dot)
-            self.thetaHat = np.clip(self.thetaHat,self.thetaMin,self.thetaMax)
-        else:
-            print("P: {}".format(self.P))
-            print("Q: {}".format(self.Q))
-            print("W: {}".format(W))
-            print("No Theta updated: \nPre  = {}\nTime = {}sec".format(pre,self.t))
-
-        self.theta     = Pinv @ self.Q
+        xHatDot = f(self.x) + g(self.x)@self.u + regressor(self.x)@self.thetaHat + Kw*self.e + self.W@self.thetaHatDot
+        # print("ThetaHatDot: {}".format(self.thetaHatDot))
+        # print("xHatDot: {}".format(xHatDot))
+        self.xHat = self.xHat + (self.dt * xHatDot)
 
     def update_error_bounds(self,t):
         """
