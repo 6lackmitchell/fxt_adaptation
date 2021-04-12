@@ -16,6 +16,8 @@
 Something here about the quadrotor simulation in Python
 
 # <a name="experimentation"></a>Experimentation
+### General Notes
+* All python executable files must begin with the "shebang", i.e. "#!/usr/bin/env python" or specifically the location of your desired python executable
 ### Setup
 1. Follow [ros/catkin instructions](http://wiki.ros.org/catkin/Tutorials/create_a_workspace) to build the workspace.
 2. Navigate the your catkin workspace and run
