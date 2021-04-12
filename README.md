@@ -15,6 +15,9 @@
 # <a name="simulation"></a>Simulation
 Something here about the quadrotor simulation in Python
 
-
 # <a name="experimentation"></a>Experimentation
-Something here about the quadrotor experimentation
+### Setup
+1. Follow [ros/catkin instructions](http://wiki.ros.org/catkin/Tutorials/create_a_workspace) to build the workspace.
+2. Navigate the your catkin workspace and run
+> rosrun <pkg_name> <program_name.py>
+
