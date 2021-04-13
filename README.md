@@ -20,6 +20,14 @@ Something here about the quadrotor simulation in Python
 * All python executable files must begin with the "shebang", i.e. "#!/usr/bin/env python" or specifically the location of your desired python executable
 ### Setup
 1. Follow [ros/catkin instructions](http://wiki.ros.org/catkin/Tutorials/create_a_workspace) to build the workspace.
-2. Navigate the your catkin workspace and run
-> rosrun <pkg_name> <program_name.py>
+2. Start the ROS Core service. Navigate the your workspace, source the appropriate setup.bash file (e.g. source devel/setup.bash), and run
+> roscore
+3. Start the Vicon Bridge service. Open a new terminal, source the setup.bash file again, and run
+> roslaunch vicon_bridge vicon.launch
+4. Start the XBee communication. Open a new terminal, source the setup file again, and run
+> roslaunch asctec_hl_interface quadx.launch
+5. It is at this point where William starts MATLAB. Here, maybe I will need to start Python/ROS wrapper.
+6. Start the main program. Open a new terminal, source the setup file again, and run
+> rosrun <pkg_name> main
+William's main program is written in C++ and it commands the quadrotor to take off and hover at a given height, and then it essentially switches over to a MATLAB program to execute the control algorithm.
 
