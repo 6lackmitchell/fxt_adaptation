@@ -29,5 +29,6 @@ Something here about the quadrotor simulation in Python
 5. It is at this point where William starts MATLAB. Here, maybe I will need to start Python/ROS wrapper.
 6. Start the main program. Open a new terminal, source the setup file again, and run
 > rosrun <pkg_name> main
+
 William's main program is written in C++ and it commands the quadrotor to take off and hover at a given height, and then it essentially switches over to a MATLAB program to execute the control algorithm.
 
