@@ -27,7 +27,7 @@ https://github.com/ethz-asl/vicon_bridge (at time of writing the required reposi
 
 We recommend creating a separate ~/git repository in which to install these, and then symbolically linking the git repos to the catkin workspace (i.e. ln -s /home/user/git/repo /home/user/catkin_ws/src). Prior to building, there are several bugs which need to be addressed. First, edit the ~/git/asctec_mav_framework/asctec_hl_interface/CMakeList.txt file such that the find_package function includes "mav_msgs" as an argument (we placed it directly below "geometry_msgs"). Second, open ~/git/asctec_mav_framework/asctec_hl_interface/src/comm.cpp and change the uint32_t designation before baudrate in lines 51, 72, and 118 to int32_t. Make the corresponding changes to the function declarations inside the ~/git/asctec_mav_framework/asctec_hl_interface/src/comm.h file as well. Then, in that same file, change the "static const" type identifier in line 99 to "static constexpr". This should allow you to successfully run "catkin build" when the time comes.
 
-1. Follow [ros/catkin instructions](http://wiki.ros.org/catkin/Tutorials/create_a_workspace) to build the workspace (~/catkin_ws).
+1. Follow [ros/catkin instructions](http://wiki.ros.org/catkin/Tutorials/create_a_workspace) to build the workspace (~/catkin_ws). Note, if you are using python virtualenvs then you must activate your environment, and then build the workspace using "catkin build -DPYTHON_EXECUTABLE=$(which python)".
 2. Start the ROS Core service. Navigate the your workspace, source the appropriate setup.bash file (e.g. source devel/setup.bash), and run
 > roscore
 3. Start the Vicon Bridge service. Open a new terminal, source the setup.bash file again, and run
