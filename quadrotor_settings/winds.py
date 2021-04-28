@@ -75,7 +75,7 @@ def partial_derivative(f,
         raise ValueError("Direction must be 'x', 'y' or 'z'.")
     return (f(a + hnew) - f(a - hnew))/(2*h)
 
-wind_file = loadmat('/home/dasc/MB/Code/FxT_AdaptationLaw_ParametricUncertainty/wind_data/wind_data.mat')
+wind_file = loadmat('/home/dasc/MB/datastore/fxt_adaptation/quadrotor/wind_data/wind_velocity_data.mat')
 wind_u    = wind_file['u2']
 wind_v    = wind_file['v2']
 wind_w    = wind_file['w2']

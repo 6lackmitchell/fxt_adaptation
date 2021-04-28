@@ -144,9 +144,9 @@ def regressor(x):
         vx,vy,vz = RR @ np.array([x[3],x[4],x[5]])
 
         # Effect of Wind on Velocity
-        wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0] + 10
+        wu   = 20#windu_interp(np.array([x[0],x[1],x[2]]))[0]
+        wv   = 20#windv_interp(np.array([x[0],x[1],x[2]]))[0]
+        ww   = 20#windw_interp(np.array([x[0],x[1],x[2]]))[0]
         RegA = np.array([[wu - vx,       0,       0],
                          [      0, wv - vy,       0],
                          [      0,       0, ww - vz]])

@@ -137,40 +137,80 @@ def g(x):
         return np.array(x.shape[0]*[g])
     return g
 
-# Wind Regressor
 def regressor(x):
-    RR = R_body_to_inertial(x)
     if np.sum(x.shape) == x.shape[0]:
-        vx,vy,vz = RR @ np.array([x[3],x[4],x[5]])
 
-        # Effect of Wind on Velocity
-        wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        RegA = np.array([[wu - vx,       0,       0],
-                         [      0, wv - vy,       0],
-                         [      0,       0, ww - vz]])
+        shape_x = 0.1
+        shape_y = 0.1
+        shape_z = 0.1
 
-        reg = np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))])
+        a11 = -(shape_x*x[0])**2
+        a12 = -(shape_x*x[0] * shape_y*x[1])
+        a13 = -(shape_x*x[0] * shape_z*x[2])
+
+        a21 = -(shape_y*x[1] * shape_x*x[0])
+        a22 = -(shape_y*x[1])**2
+        a23 = -(shape_y*x[1] * shape_z*x[2])
+
+        a31 = -(shape_z*x[2] * shape_x*x[0])
+        a32 = -(shape_z*x[2] * shape_y*x[1])
+        a33 = -(shape_z*x[2])**2
+
+        reg = np.array([[np.exp(a11),np.exp(a12),np.exp(a13)],
+                        [np.exp(a21),np.exp(a22),np.exp(a23)],
+                        [np.exp(a31),np.exp(a32),np.exp(a33)]])
+
+        reg = np.array([[np.exp(a11),          0,          0],
+                        [          0,np.exp(a22),          0],
+                        [          0,          0,np.exp(a33)]]) * 10
+
+        reg = np.concatenate([np.zeros((3,3)),reg,np.zeros((6,3))])
 
     else:
         pass
     return reg
 
-def system_dynamics(t,x,u,theta):
-    reg = regressor(x) @ theta
-    try:
-        xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + reg
-    except ValueError:
-        xdot = f(x) + np.dot(g(x),u) + reg
+# Wind Regressor
+def true_disturbance(x):
+    RR = R_body_to_inertial(x)
+    CD = 0.5 # drag coefficient
 
-    return xdot
+    if np.sum(x.shape) == x.shape[0]:
+        # Effect of Wind on Velocity
+        wx   = windu_interp(np.array([x[0],x[1],x[2]]))[0]
+        wy   = windv_interp(np.array([x[0],x[1],x[2]]))[0]
+        wz   = windw_interp(np.array([x[0],x[1],x[2]]))[0]
+
+        wbx,wby,wbz = RR.T @ np.array([wx,wy,wz])
+        vbx,vby,vbz = np.array([x[3],x[4],x[5]])
+
+        mag_rel_wind = np.linalg.norm(np.array([wbx - vbx, wby - vby, wbz - vbz]))
+        R1 = CD * mag_rel_wind * (wbx - vbx)
+        R2 = CD * mag_rel_wind * (wby - vby)
+        R3 = CD * mag_rel_wind * (wbz - vbz)
+
+        reg = np.concatenate([np.zeros((3,)),np.array([R1,R2,R3]),np.zeros((6,))])
+
+    else:
+        pass
+    return reg
+
+def system_dynamics(t,x,u):
+    # reg = regressor(x) @ theta
+    disturbance = true_disturbance(x)
+    try:
+        xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + disturbance
+    except ValueError:
+        xdot = f(x) + np.dot(g(x),u) + disturbance
+
+    return xdot,disturbance
 
 def feasibility_dynamics(t,p,v):
     return v
 
 def step_dynamics(dt,x,u):
-    return x + dt*system_dynamics(0,x,u,theta)
+    xdot,disturbance = system_dynamics(0,x,u)
+    return x + dt*xdot,disturbance
 
 nControls = g(np.zeros((1,))).shape[1]
 nParams   = regressor(np.zeros((12,))).shape[1]

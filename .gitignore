@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Pickle Files -- stores of data
+*.pkl
+
+# Diagnostic Files
+*.lp
+
 # C extensions
 *.so
 

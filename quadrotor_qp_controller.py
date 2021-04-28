@@ -12,11 +12,11 @@ from quadrotor_settings import *
 ################################## Constants ##################################
 ###############################################################################
 global F_MODEL, F_DVARS, TAU_MODEL, TAU_DVARS, TT0
-F_MODEL   = None
-TAU_MODEL = None
-F_DVARS   = None
-TAU_DVARS = None
-TT0       = None
+F_MODEL    = None
+TAU_MODEL  = None
+F_DVARS    = None
+TAU_DVARS  = None
+TT0        = None
 
 ###############################################################################
 ################################## Functions ##################################
@@ -46,7 +46,7 @@ def solve_qp(data):
 
     # Compute safe F control input
     try:
-        F = compute_safe_force()
+        F             = compute_safe_force()
         data['F_sol'] = F
     except Exception as e:
         print(feedback)
@@ -135,7 +135,9 @@ def compute_nominal_control(data: np.ndarray) -> Tuple:
 
     state = data['x']
     tt    = data['t']
+    #bigTh = data['bigTh']
     thHat = data['th']
+
 
     k_r   = 1.0   # Yaw rate proportional control gain
     k_phi = 125.0 # tau_phi proportional control gain
@@ -144,9 +146,11 @@ def compute_nominal_control(data: np.ndarray) -> Tuple:
 
     dr    = 1.0  # Damping ratio
     tc    = 0.5#.25  # Time constant
+    tc    = 0.5#.25  # Time constant
     G     = 9.81 # accel due to gravity
 
     Rp    = R_body_to_inertial(state)
+    # xddot,yddot,zddot,theta = get_nominal_acceleration(tt,state,bigTh,thHat,dr,tc,Rp)
     xddot,yddot,zddot,theta = get_nominal_acceleration(tt,state,thHat,dr,tc,Rp)
 
     F_c   = M * np.max([0,(G + zddot) / -Rp[2,2]])
@@ -180,6 +184,7 @@ def compute_nominal_control(data: np.ndarray) -> Tuple:
 
 def get_nominal_acceleration(tt:       float,
                              state:    np.ndarray,
+                             #bigTheta: np.ndarray,
                              thetaHat: np.ndarray,
                              dr:       float,
                              tc:       float,
@@ -191,7 +196,8 @@ def get_nominal_acceleration(tt:       float,
     ------
     tt:       (float) - time (sec)
     state:    (np.ndarray) - state vector
-    thetaHat: (np.ndarray) - estimates of parameters
+    bigTheta: (np.ndarray) - estimates of parameters
+    thetaHat: (np.ndarray) - estimates of parameter errors
     dr:       (float) - damping ratio
     tc:       (float) - time constant
     Rp:       (np.ndarray) - body-fixed frame to inertial frame rotation matrix
@@ -214,8 +220,8 @@ def get_nominal_acceleration(tt:       float,
     tc_z = tc
 
     x,y,z = state[:3]
-    xdot,ydot,zdot = Rp @ state[3:6] + regressor(state)[0:3] @ thetaHat
-    # xdot,ydot,zdot = Rp @ state[3:6] + reg_est(state,thetaHat)[0:3] @ thetaHat + reg_const(state,thetaHat)[0:3]
+    xdot,ydot,zdot = Rp @ (state[3:6]) + regressor(state)[0:3] @ thetaHat
+    # xdot,ydot,zdot = Rp @ state[3:6] + regressor_estimated(state,bigTheta)[0:3] + regressor(state,bigTheta)[0:3] @ thetaHat
 
     theta         = np.arctan2(y-y0,x-x0)
     theta_dot_0   = 2 * np.pi / (2 * 10.0) # 10 sec to complete semicircle
@@ -255,7 +261,7 @@ def get_nominal_acceleration(tt:       float,
     if z > 1.0 or (theta < -np.pi/2 and TT0 is not None):
         if TT0 is None:
             TT0 = tt
-        if tt > 10.64:
+        if tt > 100.64:
 
         # if theta < -np.pi/2 and theta > -7*np.pi/8:
         #     # z_c = 0.0
@@ -275,12 +281,20 @@ def get_nominal_acceleration(tt:       float,
         xddot_c       =   -B**2 * A_GERONO * np.sin(B * (tt - TT0))
         yddot_c       = -4*B**2 * A_GERONO * np.sin(B * (tt - TT0)) * np.cos(B * (tt - TT0))
 
+    # Default Dynamic Regressor
     xddot   = -2 * dr / tc_x * (xdot - xdot_c) - (x - x_c) / tc_x**2 + xddot_c - Rp[0] @ regressor(state)[3:6] @ thetaHat
     yddot   = -2 * dr / tc_y * (ydot - ydot_c) - (y - y_c) / tc_y**2 + yddot_c - Rp[1] @ regressor(state)[3:6] @ thetaHat
     zddot   = -2 * dr / tc_z * (zdot - zdot_c) - (z - z_c) / tc_z**2 + zddot_c - Rp[2] @ regressor(state)[3:6] @ thetaHat
-    # xddot   = -2 * dr / tc_x * (xdot - xdot_c) - (x - x_c) / tc_x**2 + xddot_c - Rp[0] @ (reg_est(state,thetaHat)[3:6] @ thetaHat + reg_const(state,thetaHat)[3:6])
-    # yddot   = -2 * dr / tc_y * (ydot - ydot_c) - (y - y_c) / tc_y**2 + yddot_c - Rp[1] @ (reg_est(state,thetaHat)[3:6] @ thetaHat + reg_const(state,thetaHat)[3:6])
-    # zddot   = -2 * dr / tc_z * (zdot - zdot_c) - (z - z_c) / tc_z**2 + zddot_c - Rp[2] @ (reg_est(state,thetaHat)[3:6] @ thetaHat + reg_const(state,thetaHat)[3:6])
+    
+    # # Kinematic Regressor
+    # xddot   = -2 * dr / tc_x * (xdot - xdot_c) - (x - x_c) / tc_x**2 + xddot_c
+    # yddot   = -2 * dr / tc_y * (ydot - ydot_c) - (y - y_c) / tc_y**2 + yddot_c
+    # zddot   = -2 * dr / tc_z * (zdot - zdot_c) - (z - z_c) / tc_z**2 + zddot_c
+    
+    # # Nonlinear Regressor
+    # xddot   = -2 * dr / tc_x * (xdot - xdot_c) - (x - x_c) / tc_x**2 + xddot_c - Rp[0] @ (regressor_estimated(state,bigTheta)[3:6] + regressor(state,bigTheta)[3:6] @ thetaHat)
+    # yddot   = -2 * dr / tc_y * (ydot - ydot_c) - (y - y_c) / tc_y**2 + yddot_c - Rp[1] @ (regressor_estimated(state,bigTheta)[3:6] + regressor(state,bigTheta)[3:6] @ thetaHat)
+    # zddot   = -2 * dr / tc_z * (zdot - zdot_c) - (z - z_c) / tc_z**2 + zddot_c - Rp[2] @ (regressor_estimated(state,bigTheta)[3:6] + regressor(state,bigTheta)[3:6] @ thetaHat)
 
     return xddot,yddot,zddot,theta
 

@@ -137,32 +137,48 @@ def g(x):
         return np.array(x.shape[0]*[g])
     return g
 
-# Wind Regressor
 def regressor(x):
-    RR = R_body_to_inertial(x)
     if np.sum(x.shape) == x.shape[0]:
-        vx,vy,vz = RR @ np.array([x[3],x[4],x[5]])
 
-        # Effect of Wind on Velocity
-        wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        RegA = np.array([[wu - vx,       0,       0],
-                         [      0, wv - vy,       0],
-                         [      0,       0, ww - vz]])
-
-        reg = np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))])
+        # Identity in the Inertial frame
+        reg = np.eye(3)
 
     else:
         pass
     return reg
 
-def system_dynamics(t,x,u,theta):
-    reg = regressor(x) @ theta
+# Wind Regressor
+def true_disturbance(x):
+    RR = R_body_to_inertial(x)
+    CD = 1.0 # drag coefficient
+
+    if np.sum(x.shape) == x.shape[0]:
+        # Effect of Wind on Velocity
+        wx   = windu_interp(np.array([x[0],x[1],x[2]]))[0]
+        wy   = windv_interp(np.array([x[0],x[1],x[2]]))[0]
+        wz   = windw_interp(np.array([x[0],x[1],x[2]]))[0]
+
+        wbx,wby,wbz = RR.T @ np.array([wx,wy,wz])
+        vbx,vby,vbz = np.array([x[3],x[4],x[5]])
+
+        mag_rel_wind = np.linalg.norm(np.array([wbx - vbx, wby - vby, wbz - vbz]))
+        R1 = CD * mag_rel_wind * (wbx - vbx)
+        R2 = CD * mag_rel_wind * (wby - vby)
+        R3 = CD * mag_rel_wind * (wbz - vbz)
+
+        reg = np.concatenate([np.zeros((3,)),np.array([R1,R2,R3]),np.zeros((6,))])
+
+    else:
+        pass
+    return reg
+
+def system_dynamics(t,x,u):
+    # reg = regressor(x) @ theta
+    disturbance = true_disturbance(x)
     try:
-        xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + reg
+        xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + disturbance
     except ValueError:
-        xdot = f(x) + np.dot(g(x),u) + reg
+        xdot = f(x) + np.dot(g(x),u) + disturbance
 
     return xdot
 
@@ -170,7 +186,7 @@ def feasibility_dynamics(t,p,v):
     return v
 
 def step_dynamics(dt,x,u):
-    return x + dt*system_dynamics(0,x,u,theta)
+    return x + dt*system_dynamics(0,x,u)
 
 nControls = g(np.zeros((1,))).shape[1]
 nParams   = regressor(np.zeros((12,))).shape[1]

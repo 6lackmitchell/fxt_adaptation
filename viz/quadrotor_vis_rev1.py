@@ -19,7 +19,7 @@ from scipy.io import loadmat
 from scipy.interpolate import RegularGridInterpolator as rgi
 
 
-from quadrotor_settings import tf, dt, k1, k2, arm_length, f_max, tx_max, ty_max, tz_max, G, M, F_GERONO, A_GERONO, thetaMax
+from quadrotor_settings import tf, dt, k1, k2, arm_length, f_max, tx_max, ty_max, tz_max, G, M, F_GERONO, A_GERONO, thetaMax, regressor
 # from ecc_controller_test import T_e
 
 # with plt.style.context('seaborn-colorblind'):
@@ -94,7 +94,7 @@ c2 = sig**3 * (2 / lam)**(3/2)
 T_fixed = 2 * (c1 + c2)/(c1*c2)
 
 lwidth = 2
-dash = [3,2]
+dash = [5,2]
 
 """
 # Generate True Theta params
@@ -134,9 +134,9 @@ for jj in range(ii):
         true_thetas[jj,2] = 0.0
 """
 
-force_est = np.zeros(thetahat.shape)
-for jj,th in enumerate(thetahat):
-    force_est[jj] = np.diag(regressor(th)[3:6])
+force_est = np.zeros(theta_hat.shape)
+for jj,th in enumerate(theta_hat):
+    force_est[jj] = regressor(th)[3:6] @ theta_hat[jj]
 
 # ii = np.min([int(5.418/dt),ii])
 
@@ -182,28 +182,28 @@ set_edges_black(ax2d)
 # Control via Force
 ax2a.plot(t[1:ii],f_max*np.ones(t[1:ii].shape),label=r'$F_{max}$',linewidth=lwidth+1,color='k')
 ax2a.plot(t[1:ii],0.0*np.ones(t[1:ii].shape),label=r'$F_{min}$',linewidth=lwidth+1,color='k')
-ax2a.plot(t[:ii],sols[:ii,0],label='F',linewidth=lwidth,color=colors[ecc])
 ax2a.plot(t[:ii],sols_nom[:ii,0],label=r'$F_{nom}$',linewidth=lwidth,color=colors[ecc+1],dashes=dash)
+ax2a.plot(t[:ii],sols[:ii,0],label='F',linewidth=lwidth,color=colors[ecc])
 # ax2a.plot(t[:ii],G*M*np.ones(len(t[:ii]),),label='Gravity',linewidth=lwidth,color=colors[3],dashes=dash)
 ax2a.set(ylabel=r'$F$',ylim=[-0.5,f_max*1.1],title='Control Inputs')#,xlim=[-0.1,5.2],
 ax2b.plot(t[1:ii],-tx_max*np.ones(t[1:ii].shape),label=r'$\pm\bar{\tau}_{\phi}$',linewidth=lwidth+1,color='k')
 ax2b.plot(t[1:ii], tx_max*np.ones(t[1:ii].shape),linewidth=lwidth+1,color='k')
 # ax2b.plot(t[:ii],arm_length*k1*(x[:ii,ecc,15] - x[:ii,ecc,13]),label='PRO',linewidth=lwidth,color=colors[ecc])
-ax2b.plot(t[:ii],sols[:ii,1],label='PRO',linewidth=lwidth,color=colors[ecc])
 ax2b.plot(t[:ii],sols_nom[:ii,1],label=r'$PRO_{nom}$',linewidth=lwidth,color=colors[ecc+1],dashes=dash)
+ax2b.plot(t[:ii],sols[:ii,1],label='PRO',linewidth=lwidth,color=colors[ecc])
 ax2b.set(ylabel=r'$\mu$')#xlim=[-0.1,5.2],)
 ax2b.set(ylabel=r'$\tau_{\phi}$',ylim=[-1.1*tx_max,1.1*tx_max])#xlim=[-0.1,5.2],
 ax2c.plot(t[1:ii],-ty_max*np.ones(t[1:ii].shape),label=r'$\pm\bar{\tau}_{\theta}$',linewidth=lwidth+1,color='k')
 ax2c.plot(t[1:ii], ty_max*np.ones(t[1:ii].shape),linewidth=lwidth+1,color='k')
 # ax2c.plot(t[:ii],arm_length*k1*(x[:ii,ecc,12] - x[:ii,ecc,14]),label='PRO',linewidth=lwidth,color=colors[ecc])
-ax2c.plot(t[:ii],sols[:ii,2],label='PRO',linewidth=lwidth,color=colors[ecc])
 ax2c.plot(t[:ii],sols_nom[:ii,2],label=r'$PRO_{nom}$',linewidth=lwidth,color=colors[ecc+1],dashes=dash)
+ax2c.plot(t[:ii],sols[:ii,2],label='PRO',linewidth=lwidth,color=colors[ecc])
 ax2c.set(ylabel=r'$\tau_{\theta}$',ylim=[-1.1*ty_max,1.1*ty_max])#xlim=[-0.1,5.2],
 ax2d.plot(t[1:ii],-tz_max*np.ones(t[1:ii].shape),label=r'$\pm\bar{\tau}_{\psi}$',linewidth=lwidth+1,color='k')
 ax2d.plot(t[1:ii], tz_max*np.ones(t[1:ii].shape),linewidth=lwidth+1,color='k')
 # ax2d.plot(t[:ii],k2*(-x[:ii,ecc,12]+x[:ii,ecc,13]-x[:ii,ecc,14]+x[:ii,ecc,15]),label='PRO',linewidth=lwidth,color=colors[ecc])
-ax2d.plot(t[:ii],sols[:ii,3],label='PRO',linewidth=lwidth,color=colors[ecc])
 ax2d.plot(t[:ii],sols_nom[:ii,3],label=r'$PRO_{nom}$',linewidth=lwidth,color=colors[ecc+1],dashes=dash)
+ax2d.plot(t[:ii],sols[:ii,3],label='PRO',linewidth=lwidth,color=colors[ecc])
 ax2d.set(xlabel='Time (sec)',ylabel=r'$\tau_{\psi}$',ylim=[-1.1*tz_max,1.1*tz_max])#xlim=[-0.1,5.2],
 
 
@@ -313,7 +313,7 @@ xx1           =  A_GERONO * np.sin(trig_freq * t)
 yy1           =  A_GERONO * np.sin(trig_freq * t) * np.cos(trig_freq * t)
 
 if ii*dt > 0.4:
-    new_ii = ii - int(0.4/dt)
+    new_ii = ii - int(4.25/dt)
 else:
     new_ii = ii
 
@@ -534,17 +534,20 @@ else:
     #ax4.plot(T_fixed,theta[0],'gd',markersize=10)
     #ax4.plot(T_fixed,theta[1],'gd',markersize=10)
     #ax4.plot(T_fixed,theta[2],'gd',markersize=10)
-    ax4.plot(t[:ii],-thetaMax[0]*np.ones((ii,)),label=r'$\theta _{bounds}$',linewidth=lwidth+4,color='k')
-    ax4.plot(t[:ii],thetaMax[0]*np.ones((ii,)),linewidth=lwidth+4,color='k')
+    #ax4.plot(t[:ii],-thetaMax[0]*np.ones((ii,)),label=r'$\theta _{bounds}$',linewidth=lwidth+4,color='k')
+    #ax4.plot(t[:ii],thetaMax[0]*np.ones((ii,)),linewidth=lwidth+4,color='k')
     # ax4.plot(t[:ii],theta[0]*np.ones((ii,)),label=r'$\theta _{1,true}$',color=c1,linewidth=lwidth+3,dashes=dash)
     # ax4.plot(t[:ii],theta[1]*np.ones((ii,)),label=r'$\theta _{2,true}$',color=c2,linewidth=lwidth+3,dashes=dash)
     # ax4.plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{3,true}$',color=c3,linewidth=lwidth+3,dashes=dash)
-    ax4.plot(t[:ii],disturb[:ii,3],label=r'$\theta _{1,true}$',color=c1,linewidth=lwidth+3,dashes=dash)
-    ax4.plot(t[:ii],disturb[:ii,4],label=r'$\theta _{2,true}$',color=c2,linewidth=lwidth+3,dashes=dash)
-    ax4.plot(t[:ii],disturb[:ii,5],label=r'$\theta _{3,true}$',color=c3,linewidth=lwidth+3,dashes=dash)
-    ax4.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),label=r'$\hat\theta _{1,PRO}$',linewidth=lwidth+1,color=c4)
-    ax4.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth+1,color=c5)
-    ax4.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth+1,color=c6)
+    ax4.plot(t[:ii],disturb[:ii,3],label=r'$True (x)$',color=c1,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],disturb[:ii,4],label=r'$True (y)$',color=c2,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],disturb[:ii,5],label=r'$True (z)$',color=c3,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],force_est[:ii,0],label=r'$Estimated (x)$',linewidth=lwidth+1,color=c4)
+    ax4.plot(t[:ii],force_est[:ii,1],label=r'$Estimated (y)$',linewidth=lwidth+1,color=c5)
+    ax4.plot(t[:ii],force_est[:ii,2],label=r'$Estimated (z)$',linewidth=lwidth+1,color=c6)
+    #ax4.plot(t[:ii],np.clip(theta_hat[:ii,0],-thetaMax[0],thetaMax[0]),label=r'$\hat\theta _{1,PRO}$',linewidth=lwidth+1,color=c4)
+    #ax4.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth+1,color=c5)
+    #ax4.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth+1,color=c6)
     # ax4.plot(t[:ii],np.clip(theta_inv[:ii,0],-thetaMax[0],thetaMax[0]),':',label=r'$\hat\theta _{1,PRO}$',linewidth=lwidth+1)#,color=c1)
     # ax4.plot(t[:ii],np.clip(theta_inv[:ii,1],-thetaMax[1],thetaMax[1]),':',label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth+1)#,color=c2)
     # ax4.plot(t[:ii],np.clip(theta_inv[:ii,2],-thetaMax[2],thetaMax[2]),':',label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth+1)#,color=c3)
@@ -554,14 +557,14 @@ else:
     # ax4[0].plot(t[:ii],np.clip(psi_hat[:ii,tay,0,0],-10,10),':',label=r'$\hat\theta _{1,h_1,TAY}$',color=colors[tay],linewidth=lwidth)
     # ax4[0].plot(t[:ii],np.clip(psi_hat[:ii,tay,0,1],-10,10),'-.',label=r'$\hat\theta _{1,h_2,TAY}$',color=colors[tay],linewidth=lwidth)
     ax4.legend(fancybox=True,markerscale=15,fontsize=25)
-    ax4.set(xlabel='Time (sec)',ylabel=r'$\theta$',xlim=[-0.1,ii*dt+4],ylim=[-thetaMax[0]-0.5,thetaMax[0]+0.5])
+    ax4.set(xlabel='Time (sec)',ylabel=r'$Disturbance$',xlim=[-0.1,ii*dt+4])#,ylim=[-thetaMax[0]-0.5,thetaMax[0]+0.5])
     for item in ([ax4.title, ax4.xaxis.label, ax4.yaxis.label] +
                      ax4.get_xticklabels() + ax4.get_yticklabels()):
             item.set_fontsize(25)
     # ax4.set_xticklabels([])
     ax4.grid(True,linestyle='dotted',color='white')
 
-    if ii*dt > 1.0:
+    if False:#ii*dt > 1.0:
         ax4a_inset = inset_axes(ax4,width="100%",height="100%",
                               bbox_to_anchor=(.45, .6, .3, .1),bbox_transform=ax4.transAxes, loc=3)
                               # bbox_to_anchor=(.35, .44, .3, .1),bbox_transform=ax4.transAxes, loc=3)
@@ -641,9 +644,9 @@ else:
         # ax4c_inset.set_yticklabels([None,np.round(theta[2]-0.05,2),None,None,theta[2],None,None,theta[2]+0.05,None])
         # ax4c_inset.get_yaxis().set_visible(False)
         ax4c_inset.grid(True,linestyle='dotted',color='white')
-        #mark_inset(ax4,ax4c_inset,loc1=2,loc2=4,fc="none",ec="0.2",lw=1.5)#,ls="--")
+        mark_inset(ax4,ax4c_inset,loc1=2,loc2=4,fc="none",ec="0.2",lw=1.5)#,ls="--")
 
-        #plt.draw()
+        plt.draw()
 
 plt.show()
 

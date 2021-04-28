@@ -137,19 +137,65 @@ def g(x):
         return np.array(x.shape[0]*[g])
     return g
 
-# Wind Regressor
-def regressor(x):
-    RR = R_body_to_inertial(x)
-    if np.sum(x.shape) == x.shape[0]:
-        vx,vy,vz = RR @ np.array([x[3],x[4],x[5]])
+def f_reg(x,thetaHat):
+    return f(x) + regressor_estimated(x,thetaHat)
 
-        # Effect of Wind on Velocity
-        wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0] + 10
-        RegA = np.array([[wu - vx,       0,       0],
-                         [      0, wv - vy,       0],
-                         [      0,       0, ww - vz]])
+# Wind Regressor
+def regressor_estimated(x,thetaHat):
+    RR = R_body_to_inertial(x)
+    CD = 0.12 # drag coefficient
+
+    if np.sum(x.shape) == x.shape[0]:
+
+        wbx,wby,wbz = RR.T @ np.array([thetaHat[0],thetaHat[1],thetaHat[2]])
+        vbx,vby,vbz = np.array([x[3],x[4],x[5]])
+
+        mag_rel_wind = np.linalg.norm(np.array([wbx - vbx, wby - vby, wbz - vbz]))
+        if mag_rel_wind > 0:
+            R1 = CD * mag_rel_wind * (wbx - vbx)
+            R2 = CD * mag_rel_wind * (wby - vby)
+            R3 = CD * mag_rel_wind * (wbz - vbz)
+        else:
+            R1 = R2 = R3 = 0
+
+        # RA1,RA2,RA3 = RR @ np.array([R1,R2,R3])
+
+        reg = np.concatenate([np.zeros((3,)),np.array([R1,R2,R3]),np.zeros((6,))])
+
+    else:
+        pass
+    return reg
+
+def regressor(x,thetaHat):
+    RR = R_body_to_inertial(x)
+    CD = 0.12 # drag coefficient
+
+    if np.sum(x.shape) == x.shape[0]:
+
+        wbx,wby,wbz = RR.T @ np.array([thetaHat[0],thetaHat[1],thetaHat[2]])
+        vbx,vby,vbz = np.array([x[3],x[4],x[5]])
+        mag_rel_wind = np.linalg.norm(np.array([wbx - vbx, wby - vby, wbz - vbz]))
+
+        if mag_rel_wind > 0:
+            R11 = CD * (1/mag_rel_wind * (wbx - vbx)**2 + mag_rel_wind)
+            R12 = CD * 1/mag_rel_wind * (wbx - vbx) * (wby - vby)
+            R13 = CD * 1/mag_rel_wind * (wbx - vbx) * (wbz - vbz)
+            
+            R21 = CD * 1/mag_rel_wind * (wby - vby) * (wbx - vbx)
+            R22 = CD * (1/mag_rel_wind * (wby - vby)**2 + mag_rel_wind)
+            R23 = CD * 1/mag_rel_wind * (wby - vby) * (wbz - vbz)
+
+            R31 = CD * 1/mag_rel_wind * (wbz - vbz) * (wbx - vbx)
+            R32 = CD * 1/mag_rel_wind * (wbz - vbz) * (wby - vby)
+            R33 = CD * (1/mag_rel_wind * (wbz - vbz)**2 + mag_rel_wind)
+        else:
+            R11 = R12 = R13 = 0
+            R21 = R22 = R23 = 0
+            R31 = R32 = R33 = 0
+
+        RegA = np.array([[R11,R12,R13],
+                         [R21,R22,R23],
+                         [R31,R32,R33]])
 
         reg = np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))])
 
@@ -157,8 +203,36 @@ def regressor(x):
         pass
     return reg
 
+# Wind Regressor
+def actual_regressor(x):
+    RR = R_body_to_inertial(x)
+    CD = 0.12 # drag coefficient
+
+    if np.sum(x.shape) == x.shape[0]:
+        # Effect of Wind on Velocity
+        wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0]
+        wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0]
+        ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0]
+
+        wbx,wby,wbz = RR.T @ np.array([wu,wv,ww])
+        vbx,vby,vbz = np.array([x[3],x[4],x[5]])
+
+        mag_rel_wind = np.linalg.norm(np.array([wbx - vbx, wby - vby, wbz - vbz]))
+        R1 = CD * mag_rel_wind * (wbx - vbx)
+        R2 = CD * mag_rel_wind * (wby - vby)
+        R3 = CD * mag_rel_wind * (wbz - vbz)
+
+        #RA1,RA2,RA3 = RR @ np.array([R1,R2,R3])
+
+        reg = np.concatenate([np.zeros((3,)),np.array([R1,R2,R3]),np.zeros((6,))])
+
+    else:
+        pass
+    return reg
+
 def system_dynamics(t,x,u,theta):
-    reg = regressor(x) @ theta
+    # reg = regressor(x) @ theta
+    reg = actual_regressor(x)
     try:
         xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + reg
     except ValueError:
@@ -173,4 +247,4 @@ def step_dynamics(dt,x,u):
     return x + dt*system_dynamics(0,x,u,theta)
 
 nControls = g(np.zeros((1,))).shape[1]
-nParams   = regressor(np.zeros((12,))).shape[1]
+nParams   = regressor(np.zeros((12,)),np.zeros((3,))).shape[1]

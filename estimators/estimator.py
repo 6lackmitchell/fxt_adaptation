@@ -27,17 +27,6 @@ elif FOLDER == 'quadrotor':
 global ESTIMATOR
 ESTIMATOR = None
 
-
-mu_e      = 5
-c1_e      = 50
-c2_e      = 50
-k_e       = 0.001
-l_e       = 100
-gamma1_e  = 1 - 1/mu_e
-gamma2_e  = 1 + 1/mu_e
-T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
-kG        = 1.2 # Must be greater than 1
-
 mu_e      = 2
 c1_e      = 4
 c2_e      = 4
@@ -48,6 +37,8 @@ gamma2_e  = 1 + 1/mu_e
 T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
 kG        = 1.1 # Must be greater than 1
 Kw        = 165
+Kw        = 500
+# Kw        = 10.0
 # Kw        = 1.0
 
 ###############################################################################
@@ -90,6 +81,7 @@ class Estimator():
         self.theta    = None
         self.thetaMax = None
         self.thetaMin = None
+        self.minSigma = 0
 
     def set_initial_conditions(self,**settings):
         """ """
@@ -212,19 +204,32 @@ class Estimator():
         self.update_error_bounds(0)
 
     def update(self,
-               t: float,
-               x: np.ndarray,
-               u: np.ndarray):
+               t:    float,
+               x:    np.ndarray,
+               u:    np.ndarray,
+               law:  int = 1,
+               mode: int = 1,
+               Kw:   float = Kw):
+        """ Public update method -- overwritten by child. """
+        return self._update(t,x,u,law,mode,Kw)
+
+    def _update(self,
+               t:    float,
+               x:    np.ndarray,
+               u:    np.ndarray,
+               law:  int = 1,
+               mode: int = 1,
+               Kw:   float = Kw):
         """ Updates the parameter estimates and the corresponding error bounds. """
         self.t = t
         self.x = x
         self.u = u
 
         if t == 0:
-            return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta
+            return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta,self.minSigma
 
         # Update Unknown Parameter Estimates
-        self.update_unknown_parameter_estimates(law=2)
+        self.update_unknown_parameter_estimates(law=law,mode=mode,Kw=Kw)
 
         # Update state estimate using observer dynamics
         self.update_observer()
@@ -232,61 +237,74 @@ class Estimator():
         # Update theta_tilde upper/lower bounds
         self.update_error_bounds(self.t)
 
-        return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta
+        return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta,self.minSigma
 
-    def update_unknown_parameter_estimates(self,law=1):
+    def update_unknown_parameter_estimates(self,
+                                           law:  int = 1,
+                                           mode: int = 1,
+                                           Kw:   float = Kw):
         """
         """
         tol = 0#1e-15
         # self.update_filter_2ndOrder()
 
-        eig = self.update_auxiliaries()
+        eig = self.update_auxiliaries(mode=mode,Kw=Kw)
         if eig <= 0:
             # return
             raise ValueError('PE Condition Not Met: Eig(P) = {:.3f}'.format(eig))
 
-        # General Quantities
-        # W    = self.P @ self.thetaHat - self.Q
-        # Pinv = np.linalg.inv(self.P)
+        if mode == 1:
+            vec = self.e
+            Mat = self.W
+        elif mode == 2:
+            Mat = -self.P
+            vec = self.P @ self.thetaHat - self.Q
 
+        # Minimum singular value
+        u,s,v = np.linalg.svd(Mat)
+        self.minSigma = np.min(s)
 
-        # New relationship: e = W\Tilde{\theta}
-        W      =  self.e
-        self.P = -self.W
-
-
-        if law == 1:
+        if law == 0:
+            MatInv = np.linalg.inv(-Mat)
+            
             # Adaptation Law 1
-            pre  = self.Gamma @ W / (W.T @ Pinv.T @ W)
-            V    = (1/2 * W.T @ Pinv.T @ np.linalg.inv(self.Gamma) @ Pinv @ W)
+            pre  = self.Gamma @ vec / (vec.T @ MatInv.T @ vec)
+            V    = (1/2 * vec.T @ MatInv.T @ np.linalg.inv(self.Gamma) @ MatInv @ vec)
             self.thetaHatDot = pre * (-c1_e * V**gamma1_e - c2_e * V**gamma2_e)
 
-        elif law == 2:
-            if np.linalg.norm(W) < 1e-15:
+        elif law == 1:
+            if np.linalg.norm(vec) < 1e-15:
+                self.thetaHatDot = 0.0 * self.thetaHat
                 return
-            # Adaptation Law 2
-            pre  = -self.Gamma / (np.linalg.norm(W))
-            self.thetaHatDot = pre @ (self.P.T @ W + self.P.T @ W * (W.T @ W))
 
-            norm_chk = np.linalg.norm(W)
+            # Adaptation Law 2
+            pre  = self.Gamma / (np.linalg.norm(vec))
+            prepreXi = self.Gamma @ regressor(self.x).T @ vec
+            self.thetaHatDot = prepreXi + pre @ (Mat.T @ vec + Mat.T @ vec * (vec.T @ vec))
+
+            norm_chk = np.linalg.norm(vec)
             if np.isnan(norm_chk) or np.isinf(norm_chk) or norm_chk == 0:
                 print("ThetaHat: {}".format(self.thetaHat))
-                raise ValueError("W Norm Zero")
+                raise ValueError("Vec Norm Error: {}".format(norm_chk))
 
         thd_norm      = np.linalg.norm(self.thetaHatDot)
         if thd_norm >= tol and not (np.isnan(thd_norm) or np.isinf(thd_norm)):
             self.thetaHat = self.thetaHat + (self.dt * self.thetaHatDot)
-            self.thetaHat = np.clip(self.thetaHat,self.thetaMin,self.thetaMax)
+            #self.bigTheta = self.bigTheta + (self.dt * self.thetaHat)
+            #self.bigTheta = np.clip(self.bigTheta,self.thetaMin,self.thetaMax)
+
         else:
-            print("P: {}".format(self.P))
-            print("Q: {}".format(self.Q))
-            print("W: {}".format(W))
+            print("Mat: {}".format(Mat))
+            print("Vec: {}".format(vec))
+            print("The: {}".format(np.linalg.inv(Mat)@vec))
             print("No Theta updated")
             print("Pre  = {}\nTime = {}sec".format(pre,self.t))
 
         # self.theta     = Pinv @ self.Q
 
-    def update_auxiliaries(self):
+    def update_auxiliaries(self,
+                           mode: int = 1,
+                           Kw:   float = Kw):
         """ Updates the auxiliary matrix and vector for the filtering scheme.
 
         INPUTS:
@@ -296,32 +314,32 @@ class Estimator():
         float -- minimum eigenvalue of P matrix
 
         """
-        Wdot   = -Kw * self.W + regressor(self.x)
-        # xi_dot = -Kw * self.xi
+        if mode == 1:
+            Wdot   = -Kw * self.W + regressor(self.x)
+            self.W = self.W  + (self.dt * Wdot)
 
-        self.W  = self.W  + (self.dt * Wdot)
-        # self.xi = self.xi + (self.dt * xi_dot)
+        elif mode == 2:
 
-        # Pdot = -l_e * self.P + np.dot(self.W.T,self.W)
-        # Qdot = -l_e * self.Q + np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+            # Pdot = -l_e * self.P + np.dot(self.W.T,self.W)
+            # Qdot = -l_e * self.Q + np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
 
-        # Pdot = np.dot(self.W.T,self.W)
-        # Qdot = np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+            # Pdot = np.dot(self.W.T,self.W)
+            # Qdot = np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
 
-        # print("W:  {}".format(self.W))
-        # print("e:  {}".format(self.e))
-        # print("xi: {}".format(self.xi))
+            # print("W:  {}".format(self.W))
+            # print("e:  {}".format(self.e))
+            # print("xi: {}".format(self.xi))
 
-        # self.P = self.P + (self.dt * Pdot)
-        # self.Q = self.Q + (self.dt * Qdot)
+            # self.P = self.P + (self.dt * Pdot)
+            # self.Q = self.Q + (self.dt * Qdot)
 
-        norm_chk = np.linalg.norm(self.P)
-        if np.isnan(norm_chk) or np.isinf(norm_chk):
-            raise ValueError("P Norm out of bounds")
+            norm_chk = np.linalg.norm(self.P)
+            if np.isnan(norm_chk) or np.isinf(norm_chk):
+                raise ValueError("P Norm out of bounds")
 
-        norm_chk = np.linalg.norm(self.Q)
-        if np.isnan(norm_chk) or np.isinf(norm_chk):
-            raise ValueError("Q Norm out of bounds")
+            norm_chk = np.linalg.norm(self.Q)
+            if np.isnan(norm_chk) or np.isinf(norm_chk):
+                raise ValueError("Q Norm out of bounds")
 
         return 1#np.min(np.linalg.eig(self.P)[0])
 

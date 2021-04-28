@@ -16,4 +16,5 @@ if config == 'simple2ndorder':
 elif config == 'overtake':
     import viz.overtake_vis
 elif config == 'quadrotor':
-    import viz.quadrotor_vis
+	import viz.quadrotor_vis_rev1
+    # import viz.quadrotor_vis
