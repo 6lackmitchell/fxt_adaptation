@@ -146,7 +146,6 @@ def compute_nominal_control(data: np.ndarray) -> Tuple:
 
     dr    = 1.0  # Damping ratio
     tc    = 0.5#.25  # Time constant
-    tc    = 0.5#.25  # Time constant
     G     = 9.81 # accel due to gravity
 
     Rp    = R_body_to_inertial(state)
@@ -371,9 +370,9 @@ def update_force_constraints(model:  gp.Model,
     model.remove(model.getConstrs())
 
     # Relative-Degree 2 Safety Constraint - Altitude Safety
-    Lf2h  = cbf2dot_altitude_uncontrolled(state) - etaTerms[1]
+    Lf2h  = cbf2dot_altitude_uncontrolled(state)# - etaTerms[1]
     LgLfh = cbf2dot_altitude_controlled(state)
-    Lfh   = cbfdot_altitude(state) - etaTerms[0]
+    Lfh   = cbfdot_altitude(state)# - etaTerms[0]
     h     = cbf_altitude(state) - 1/2 * eta.T @ np.linalg.inv(Gamma) @ eta
 
     # K-Coefficients for HO-CBF Terms
@@ -382,10 +381,30 @@ def update_force_constraints(model:  gp.Model,
 
     # Formalized Exponential CBF Condition (with feasibility parameter on h)
     ho_cbf = Lf2h + LgLfh*d_vars[0] + K1*Lfh + K0*h*d_vars[1]
-    # ho_cbf = 10.0
 
     # Add New Constraint
     model.addConstr(ho_cbf >= 0)
+
+    # Relative-Degree 1 Velocity Constraints - Regressor Condition
+    Lfh_x = cbfdot_velx_uncontrolled(state)# - etaTerms[0]
+    Lfh_y = cbfdot_vely_uncontrolled(state)# - etaTerms[0]
+    Lfh_z = cbfdot_velz_uncontrolled(state)# - etaTerms[0]
+    Lgh_x = cbfdot_velx_controlled(state)
+    Lgh_y = cbfdot_vely_controlled(state)
+    Lgh_z = cbfdot_velz_controlled(state)
+    h_x   = cbf_velx(state) - 1/2 * eta.T @ np.linalg.inv(Gamma) @ eta
+    h_y   = cbf_vely(state) - 1/2 * eta.T @ np.linalg.inv(Gamma) @ eta
+    h_z   = cbf_velz(state) - 1/2 * eta.T @ np.linalg.inv(Gamma) @ eta
+
+    # Formalized Exponential CBF Condition (with feasibility parameter on h)
+    ho_cbf_x = Lfh_x + Lgh_x*d_vars[0] + K0*h_x*d_vars[2]
+    ho_cbf_y = Lfh_y + Lgh_y*d_vars[0] + K0*h_y*d_vars[3]
+    ho_cbf_z = Lfh_z + Lgh_z*d_vars[0] + K0*h_z*d_vars[4]
+
+    # Add New Constraint
+    model.addConstr(ho_cbf_x >= 0)
+    model.addConstr(ho_cbf_y >= 0)
+    model.addConstr(ho_cbf_z >= 0)
 
     # Update Model
     model.update()
@@ -415,6 +434,7 @@ def update_torque_constraints(model:  gp.Model,
     """
     # QP-Safety Tolerance (Numerical Integration Error)
     epsilon = 1e-6
+    epsilon = 1e-15
 
     # Unpack data dict
     tt       = data['t']
@@ -460,6 +480,7 @@ def update_torque_constraints(model:  gp.Model,
     min_tau1 = F * arm_length + d_vars[0]
     max_tau2 = F * arm_length - d_vars[1]
     min_tau2 = F * arm_length + d_vars[1]
+    
     model.addConstr(max_tau1 >= 0)
     model.addConstr(min_tau1 >= 0)
     model.addConstr(max_tau2 >= 0)
@@ -587,9 +608,9 @@ def update_torque_constraints(model:  gp.Model,
     alpha1 = 1.0
 
     # Relative-Degree 2 Safety Constraint - Attitude Safety
-    Lf2h   = cbf2dot_attitude_uncontrolled(state) - etaTerms[1]
+    Lf2h   = cbf2dot_attitude_uncontrolled(state)# - etaTerms[1]
     LgLfh  = cbf2dot_attitude_controlled(state)
-    Lfh    = cbfdot_attitude(state) - etaTerms[0]
+    Lfh    = cbfdot_attitude(state)# - etaTerms[0]
     h      = cbf_attitude(state) - 1/2 * eta.T @ np.linalg.inv(Gamma) @ eta
 
     K0 = alpha1*alpha0

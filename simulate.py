@@ -19,6 +19,8 @@ __email__      = "mblackjr@umich.edu"
 __status__     = "Development"
 
 # Determine which problem we are solving
+DEFAULT  = 'single_integrator'
+filepath = '/home/dasc/MB/datastore/fxt_adaptation/' + DEFAULT + '/'
 filepath = '/home/dasc/MB/datastore/fxt_adaptation/quadrotor/'
 args = sys.argv
 if len(args) > 1:
@@ -28,15 +30,17 @@ if len(args) > 1:
     else:
         save_file = 'TESTING'
 else:
-    config = "simple"
+    config = DEFAULT
+
+PARAMETER_ADAPTATION = False
 
 # Make problem config available to other modules
 builtins.ecc_MODEL_CONFIG = config
 builtins.SAVE_FILE        = filepath + save_file + '.pkl'
 
 # Problem specific imports
-if config == 'simple':
-    from simple_settings import *
+if config == DEFAULT:
+    from single_integrator_settings import *
     from simple_qp_controller import solve_qp
 elif config == 'quadrotor':
     from quadrotor_settings import *
@@ -46,17 +50,19 @@ else:
 
 # from estimators.estimator import adaptation_law
 # from estimators.nonlinear_estimator import adaptation_law
-from estimators.estimator import adaptation_law
+from estimators.estimator import adaptation_law, modes, pp, qq, rr, mu, GammaS, GammaE
 
 # Logging variables
 x             = np.zeros((nTimesteps,nStates))
 u             = np.zeros((nTimesteps,nControls))
 # p             = np.zeros((nTimesteps,nFeasibilityParams))
 xhat          = np.zeros((nTimesteps,nStates))
+error         = np.zeros((nTimesteps,nStates))
 bigtheta      = np.zeros((nTimesteps,nParams))
 thetahat      = np.zeros((nTimesteps,nParams))
 thetainv      = np.zeros((nTimesteps,nParams))
 minSigma      = np.zeros((nTimesteps,))
+M_matrix      = np.zeros((nTimesteps,nStates,nParams))
 qp_sol        = np.zeros((nTimesteps,nSols))
 nominal_sol   = np.zeros((nTimesteps,nSols))
 cbfs          = np.zeros((nTimesteps,nCBFs))
@@ -69,6 +75,15 @@ x[0,:]        = x0
 bigtheta[0,:] = bigTheta
 thetahat[0,:] = thetaHat
 u             = np.zeros((nControls,))
+law           = 1
+mode          = modes['rate']
+time_varying  = False
+
+# More initial parameters
+errMax        = thetaMax - thetaMin
+etaTerms      = np.zeros((4,))
+GammaS        = GammaS(dt,ts,x0,u,law=law,mode=mode)
+GammaE        = GammaE(dt,ts,x0,u,law=law,mode=mode)
 
 try:
     for ii,tt in enumerate(np.linspace(ts,tf,nTimesteps)):
@@ -77,7 +92,7 @@ try:
 
         # Compute new parameter estimate
         #bigtheta[ii],thetahat[ii],errMax,etaTerms,Gamma,state_f,thetainv[ii],minSigma[ii] = adaptation_law(dt,tt,x[ii],u)
-        thetahat[ii],errMax,etaTerms,Gamma,xf[ii],thetainv[ii],minSigma[ii] = adaptation_law(dt,tt,x[ii],u)
+        #thetahat[ii],errMax,etaTerms,Gamma,xf[ii],thetainv[ii],minSigma[ii],M_matrix[ii] = adaptation_law(dt,tt,x[ii],u,law=law,mode=mode)
 
         # Compute Control Input
         qp_sol[ii,:],nominal_sol[ii,:] = solve_qp({'t':        tt,
@@ -86,14 +101,18 @@ try:
                                                    'th':       thetahat[ii],
                                                    'err':      errMax,
                                                    'etaTerms': etaTerms,
-                                                   'Gamma':    Gamma})
+                                                   'Gamma':    GammaS})
         u = qp_sol[ii,:nControls]
 
-        # Log Updates
-        cbfs[ii] = cbf(x[ii])
-
         # Advance Dynamics
-        x[ii+1,:],true_disturb[ii,:] = step_dynamics(dt,x[ii],u)
+        x[ii+1,:],true_disturb[ii+1,:] = step_dynamics(dt,x[ii],u)
+
+        # Compute new parameter estimate
+        if PARAMETER_ADAPTATION:
+            thetahat[ii+1],errMax,etaTerms,xf[ii+1],thetainv[ii+1],minSigma[ii+1],M_matrix[ii+1],error[ii+1] = adaptation_law(dt,tt,x[ii+1],u,law=law,mode=mode,time_varying=time_varying)
+
+        # Log Updates
+        cbfs[ii+1] = cbf(x[ii+1])
 
 except Exception as e:
     traceback.print_exc()
@@ -115,11 +134,14 @@ finally:
             'thetahat':thetahat,
             'thetainv':thetainv,
             'minSigma':minSigma,
-            'Gamma':Gamma,
+            'M_matrix':M_matrix,
+            'Gamma':GammaE,
             'cbf':cbfs,
             'clf':clf,
             'disturb':true_disturb,
             'xf':xf,
+            'error':error,
+            'fxt_params':{'pp':pp,'qq':qq,'rr':rr,'gamma1':1 - 1/mu,'gamma2':1 + 1/mu,'mu':mu},
             'ii':ii}
 
     # Write data to file

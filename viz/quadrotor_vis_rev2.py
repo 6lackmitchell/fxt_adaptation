@@ -17,6 +17,7 @@ from mpl_toolkits import mplot3d
 import pandas as pd
 from scipy.io import loadmat
 from scipy.interpolate import RegularGridInterpolator as rgi
+from icecream import ic
 
 
 from quadrotor_settings import tf, dt, k1, k2, arm_length, f_max, tx_max, ty_max, tz_max, G, M, F_GERONO, A_GERONO, thetaMax, regressor
@@ -64,34 +65,78 @@ else:
 
 with open(filename,'rb') as f:
     try:
-        data      = pickle.load(f)
-        x         = data['x']
-        # p         = data['p']
-        theta     = data['theta']
-        sols      = data['sols']
-        sols_nom  = data['sols_nom']
-        #theta_hat = data['bigtheta']
-        theta_hat = data['thetahat']
-        #d_theta   = data['thetahat']
-        theta_inv = data['thetainv']
-        cbf_val   = data['cbf']
-        #clf_val   = data['clf']
-        xf        = data['xf']
-        minSigma  = data['minSigma']
-        Gamma     = data['Gamma']
-        disturb   = data['disturb']
-        # Vmax      = data['Vmax']
-        # psi_hat   = data['psi_hat']
-        ii        = data['ii']
+        data       = pickle.load(f)
+        x          = data['x']
+        theta      = data['theta']
+        sols       = data['sols']
+        sols_nom   = data['sols_nom']
+        #theta_hat  = data['bigtheta']
+        theta_hat  = data['thetahat']
+        #d_theta    = data['thetahat']
+        theta_inv  = data['thetainv']
+        cbf_val    = data['cbf']
+        xf         = data['xf']
+        minSigma   = data['minSigma']
+        #M_matrix   = data['M_matrix']
+        Gamma      = data['Gamma']
+        disturb    = data['disturb']
+        error      = data['error']
+        ii         = data['ii']
+        try:
+            fxt_params = data['fxt_params']
+        except:
+            fxt_params = {'pp':1,'qq':1,'gamma1':0.5,'gamma2':1.5}
     except:
         traceback.print_exc()
 
 # Compute FxT Bound
-sig = np.min(minSigma[int(0.01/dt):ii])
+try:
+    mu = fxt_params['mu']
+except:
+    mu = 1.5
+pp = fxt_params['pp']
+qq = fxt_params['qq']
+rr = fxt_params['rr']
+g1 = fxt_params['gamma1']
+g2 = fxt_params['gamma2']
+warmup = 0.5
+warmup = 0.001
+warmup = 2*dt
+sig = np.min(minSigma[int(warmup/dt):ii])
 lam = 1 / Gamma[0,0]
-c1 = sig * np.sqrt(2 / lam)
-c2 = sig**3 * (2 / lam)**(3/2)
-T_fixed = 2 * (c1 + c2)/(c1*c2)
+G = sig * np.sqrt(2 / lam)
+ic(G)
+
+# Compute Max Derivative
+delta_disturb = []
+flag = True
+max_d = 0
+for jj,dd in enumerate(disturb[1:ii]):
+    if flag:
+        old_disturb = dd
+        flag = False
+        continue
+    ddh = np.amax(dd - old_disturb)
+    ddl = abs(np.amin(dd - old_disturb))
+    ddd = np.max([ddh,ddl])
+    if ddd > max_d:
+        max_d = ddd
+    old_disturb = dd
+
+ic(max_d / dt)
+
+# Compute T_Fixed: mu * (1 / bG^() + 1 / aG^())
+c1 = pp * G**(2.0 - 2.0/mu)
+c2 = qq * G**(2.0 + 2.0/mu)
+#c1 = pp * sig * (2 / lam) ** g1
+#c2 = qq * sig**3 * (2 / lam) ** g2
+#T_fixed = 2 * (c1 + c2)/(c1*c2) + warmup
+T_fixed = 1 / (c1 * (1 - g1)) + 1 / (c2 * (g2 - 1))
+ic(Gamma)
+ic(sig)
+ic(lam)
+ic(c1,c2)
+ic(T_fixed)
 
 lwidth = 2
 dash = [5,2]
@@ -242,18 +287,20 @@ plt.tight_layout(pad=2.0)
 
 ############################################
 ### CBF Trajectories ###
+nCBFs = len(cbf_val[1])
+cbf_labels = ['Altitude','Attitude','xVel','yVel','zVel']
 fig5 = plt.figure(figsize=(8,8))
 ax3  = fig5.add_subplot(111)
 set_edges_black(ax3)
 ax3.plot(t[1:ii],np.zeros(t[1:ii].shape),label=r'Boundary',linewidth=lwidth,color='k')
-ax3.plot(t[1:ii],cbf_val[1:ii,0],label='Altitude',linewidth=lwidth,color=colors[ecc])
-# ax3.plot(t[1:ii],cbf_val[1:ii,1],label='Outer',linewidth=lwidth,color=colors[ecc+1])
-# ax3.plot(t[1:ii],cbf_val[1:ii,2],label='Inner',linewidth=lwidth,color=colors[ecc+2])
-# ax3.plot(t[1:ii],cbf_val[1:ii,3],label='VelOuter',linewidth=lwidth,color=colors[ecc+3])
-# ax3.plot(t[1:ii],cbf_val[1:ii,4],label='VelInner',linewidth=lwidth,color=colors[ecc+4])
-ax3.plot(t[1:ii],cbf_val[1:ii,1],label='Attitude',linewidth=lwidth,color=colors[ecc+5])
-# ax3.plot(t[1:ii],cbf_val[1:ii,ecc,1],label=r'$PRO2$',linewidth=lwidth,color=colors[ecc+1])
-# ax3.plot(t[1:ii],cbf_val[1:ii,ecc,2],label=r'$PRO3$',linewidth=lwidth,color=colors[ecc+2])
+for nn in range(nCBFs):
+    ax3.plot(t[1:ii],cbf_val[1:ii,nn],label=cbf_labels[nn],linewidth=lwidth,color=colors[ecc+nn])
+
+
+#ax3.plot(t[1:ii],cbf_val[1:ii,0],label='Altitude',linewidth=lwidth,color=colors[ecc])
+#ax3.plot(t[1:ii],cbf_val[1:ii,1],label='Attitude',linewidth=lwidth,color=colors[ecc+5])
+
+
 ax3.set(xlabel='Time (sec)',ylabel='h(x)',title='CBF Trajectory')
 ax3.set(xlim=[-0.5,6.5],ylim=[-1,20])
 for item in ([ax3.title, ax3.xaxis.label, ax3.yaxis.label] +
@@ -264,30 +311,10 @@ ax3.grid(True,linestyle='dotted',color='white')
 
 plt.tight_layout(pad=2.0)
 
-############################################
-### Error Trajectories ###
-fig91 = plt.figure(figsize=(8,8))
-ax91   = fig91.add_subplot(111)
-set_edges_black(ax91)
-ax91.plot(t[:ii],x[:ii,0]-xf[:ii,0],label=r'$e_x$',linewidth=lwidth,color=colors[ecc])
-ax91.plot(t[:ii],x[:ii,1]-xf[:ii,1],label=r'$e_y$',linewidth=lwidth,color=colors[ecc+2])
-ax91.plot(t[:ii],x[:ii,2]-xf[:ii,2],label=r'$e_z$',linewidth=lwidth,color=colors[ecc+4])
-ax91.set(xlabel='Time (sec)',ylabel='State',title='True vs. Observer Trajectories')
-ax91.set(xlim=[-0.5,6.5],ylim=[-1,20])
-for item in ([ax91.title, ax91.xaxis.label, ax91.yaxis.label] +
-             ax91.get_xticklabels() + ax91.get_yticklabels()):
-    item.set_fontsize(25)
-ax91.legend(fancybox=True,loc=1)
-ax91.grid(True,linestyle='dotted',color='white')
-
-plt.tight_layout(pad=2.0)
-
-
-
 
 
 ############################################
-### Filter Trajectories ###
+### Min Singular Value Trajectories ###
 fig999 = plt.figure(figsize=(8,8))
 ax999   = fig999.add_subplot(111)
 set_edges_black(ax999)
@@ -303,6 +330,47 @@ ax999.grid(True,linestyle='dotted',color='white')
 plt.tight_layout(pad=2.0)
 
 
+
+############################################
+### Error Trajectories ###
+fig0999 = plt.figure(figsize=(8,8))
+ax0999   = fig0999.add_subplot(111)
+set_edges_black(ax0999)
+ax0999.plot(t[:ii],error[:ii,3],label=r'e4',linewidth=lwidth,color=colors[ecc])
+ax0999.plot(t[:ii],error[:ii,4],label=r'e5',linewidth=lwidth,color=colors[ecc+1])
+ax0999.plot(t[:ii],error[:ii,5],label=r'e6',linewidth=lwidth,color=colors[ecc+2])
+ax0999.set(xlabel='Time (sec)',ylabel=r'$e$',title='Observer Error')
+ylimlo = np.max([np.min(error),-100])
+ylimhi = np.min([np.max(error),100]) 
+ax0999.set(ylim=[ylimlo,ylimhi])
+for item in ([ax0999.title, ax0999.xaxis.label, ax0999.yaxis.label] +
+             ax0999.get_xticklabels() + ax0999.get_yticklabels()):
+    item.set_fontsize(25)
+ax0999.legend(fancybox=True,loc=1)
+ax0999.grid(True,linestyle='dotted',color='white')
+
+plt.tight_layout(pad=2.0)
+
+
+############################################
+### Error Trajectories ###
+fig012 = plt.figure(figsize=(8,8))
+ax012   = fig012.add_subplot(111)
+set_edges_black(ax012)
+ax012.plot(t[:ii],x[:ii,0],label=r'x',linewidth=lwidth,color=colors[ecc])
+ax012.plot(t[:ii],x[:ii,1],label=r'y',linewidth=lwidth,color=colors[ecc+1])
+ax012.plot(t[:ii],x[:ii,2],label=r'z',linewidth=lwidth,color=colors[ecc+2])
+ax012.set(xlabel='Time (sec)',ylabel=r'$Position (m)$',title='XYZ Trajectories')
+ylimlo = np.max([np.min(x[:,:3]),-100])
+ylimhi = np.min([np.max(x[:,:3]), 100]) 
+ax012.set(ylim=[ylimlo,ylimhi])
+for item in ([ax012.title, ax012.xaxis.label, ax012.yaxis.label] +
+             ax012.get_xticklabels() + ax012.get_yticklabels()):
+    item.set_fontsize(25)
+ax012.legend(fancybox=True,loc=1)
+ax012.grid(True,linestyle='dotted',color='white')
+
+plt.tight_layout(pad=2.0)
 
 
 
@@ -330,34 +398,6 @@ for item in ([ax2.title, ax2.xaxis.label, ax2.yaxis.label] +
     item.set_fontsize(25)
 ax2.legend(fancybox=True)
 ax2.grid(True,linestyle='dotted',color='white')
-
-plt.tight_layout(pad=2.0)
-
-############################################
-### PE, PN ###
-fig01 = plt.figure(figsize=(8,8))
-ax02  = fig01.add_subplot(111)
-set_edges_black(ax02)
-
-trig_freq     = 2 * np.pi * F_GERONO
-xx1           =  A_GERONO * np.sin(trig_freq * t)
-yy1           =  A_GERONO * np.sin(trig_freq * t) * np.cos(trig_freq * t)
-
-if ii*dt > plot_tf:
-    new_ii = ii - int(plot_tf/dt)
-else:
-    new_ii = ii
-
-ax02.plot(t[:new_ii],x[:new_ii,0],label='ActualX',linewidth=lwidth+1,color=colors[ecc])
-ax02.plot(t[:new_ii],x[:new_ii,1],label='ActualY',linewidth=lwidth+1,color=colors[ecc+1])
-ax02.plot(t[:new_ii],xx1[:new_ii],label='TrackX',linewidth=lwidth,color=colors[ecc+2])
-ax02.plot(t[:new_ii],yy1[:new_ii],label='TrackY',linewidth=lwidth,color=colors[ecc+3])
-ax02.set(ylabel='Pos',xlabel='t',title='Trajectories')#,ylim=[-5,5],xlim=[-5,5])#,title='Control Inputs')
-for item in ([ax02.title, ax02.xaxis.label, ax02.yaxis.label] +
-             ax02.get_xticklabels() + ax02.get_yticklabels()):
-    item.set_fontsize(25)
-ax02.legend(fancybox=True)
-ax02.grid(True,linestyle='dotted',color='white')
 
 plt.tight_layout(pad=2.0)
 
@@ -448,9 +488,6 @@ if False:
         ax4b_inset.spines['right'].set_color('#000000')
         ax4b_inset.spines['left'].set_color('#000000')
         ax4b_inset.plot(t[:ii],theta[1]*np.ones((ii,)),label=r'$\theta _{2,true}$',color='c',linewidth=lwidth,dashes=dash)
-        # ax4b_inset.plot(t[:ii],np.clip(theta_hat[:ii,lsm,1],-10,10),label=r'$\hat\theta _{2,LSM}$',color=colors[lsm],linewidth=lwidth)
-        # ax4b_inset.plot(t[:ii],np.clip(psi_hat[:ii,tay,1,0],-10,10),':',label=r'$\hat\theta _{2,TAY,h_1}$',color=colors[tay],linewidth=lwidth)
-        # ax4b_inset.plot(t[:ii],np.clip(psi_hat[:ii,tay,1,1],-10,10),'-.',label=r'$\hat\theta _{2,TAY,h_2}$',color=colors[tay],linewidth=lwidth)
         ax4b_inset.plot(t[:ii],np.clip(theta_hat[:ii,1],-thetaMax[1],thetaMax[1]),label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth)
         ax4b_inset.plot(T_fixed,theta[1],'gd',label='Fixed-Time',markersize=10)
         ax4b_inset.set_xlim(0.75,1.25)
@@ -480,9 +517,6 @@ if False:
     ax4[2].plot(t[:ii],-thetaMax[2]*np.ones((ii,)),label=r'$\theta _{3,bounds}$',linewidth=lwidth+4,color='k')
     ax4[2].plot(t[:ii],thetaMax[2]*np.ones((ii,)),linewidth=lwidth+4,color='k')
     ax4[2].plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{3,true}$',linewidth=lwidth,color='c',dashes=dash)
-    # ax4[1].plot(t[:ii],np.clip(theta_hat[:ii,lsm,1],-10,10),label=r'$\hat\theta _{2,LSM}$',linewidth=lwidth,color=colors[lsm])
-    # ax4[1].plot(t[:ii],np.clip(psi_hat[:ii,tay,1,0],-10,10),':',label=r'$\hat\theta _{2,h_1,TAY}$',color=colors[tay],linewidth=lwidth)
-    # ax4[1].plot(t[:ii],np.clip(psi_hat[:ii,tay,1,1],-10,10),'-.',label=r'$\hat\theta _{2,h_2,TAY}$',color=colors[tay],linewidth=lwidth)
     ax4[2].plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),label=r'$\hat\theta _{3,PRO}$',linewidth=lwidth,color=colors[ecc])
     ax4[2].legend(fancybox=True,markerscale=15)
     ax4[2].set(xlabel='Time (sec)',ylabel=r'$\theta _3$',xlim=[-0.1,ii*dt+0.75],ylim=[-thetaMax[2]-0.5,thetaMax[2]+0.5])
@@ -496,9 +530,6 @@ if False:
         ax4c_inset.spines['right'].set_color('#000000')
         ax4c_inset.spines['left'].set_color('#000000')
         ax4c_inset.plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{2,true}$',color='c',linewidth=lwidth,dashes=dash)
-        # ax4c_inset.plot(t[:ii],np.clip(theta_hat[:ii,lsm,1],-10,10),label=r'$\hat\theta _{2,LSM}$',color=colors[lsm],linewidth=lwidth)
-        # ax4c_inset.plot(t[:ii],np.clip(psi_hat[:ii,tay,1,0],-10,10),':',label=r'$\hat\theta _{2,TAY,h_1}$',color=colors[tay],linewidth=lwidth)
-        # ax4c_inset.plot(t[:ii],np.clip(psi_hat[:ii,tay,1,1],-10,10),'-.',label=r'$\hat\theta _{2,TAY,h_2}$',color=colors[tay],linewidth=lwidth)
         ax4c_inset.plot(t[:ii],np.clip(theta_hat[:ii,2],-thetaMax[2],thetaMax[2]),label=r'$\hat\theta _{2,PRO}$',linewidth=lwidth)
         ax4c_inset.plot(T_fixed,theta[2],'gd',label='Fixed-Time',markersize=10)
         ax4c_inset.set_xlim(0.75,1.25)
@@ -535,18 +566,18 @@ else:
     ax4.spines['top'].set_color('#000000')
     ax4.spines['right'].set_color('#000000')
     ax4.spines['left'].set_color('#000000')
-    #ax4.plot(T_fixed,theta[0],'gd',label='Fixed-Time',markersize=1)
-    #ax4.plot(T_fixed,theta[0],'gd',markersize=10)
-    #ax4.plot(T_fixed,theta[1],'gd',markersize=10)
-    #ax4.plot(T_fixed,theta[2],'gd',markersize=10)
+    ax4.plot(T_fixed,theta[0],'gd',label='Fixed-Time',markersize=1)
+    ax4.plot(T_fixed,theta[0],'gd',markersize=10)
+    ax4.plot(T_fixed,theta[1],'gd',markersize=10)
+    ax4.plot(T_fixed,theta[2],'gd',markersize=10)
     #ax4.plot(t[:ii],-thetaMax[0]*np.ones((ii,)),label=r'$\theta _{bounds}$',linewidth=lwidth+4,color='k')
     #ax4.plot(t[:ii],thetaMax[0]*np.ones((ii,)),linewidth=lwidth+4,color='k')
-    ax4.plot(t[:ii],theta[0]*np.ones((ii,)),label=r'$\theta _{1,true}$',color=c1,linewidth=lwidth+3,dashes=dash)
-    ax4.plot(t[:ii],theta[1]*np.ones((ii,)),label=r'$\theta _{2,true}$',color=c2,linewidth=lwidth+3,dashes=dash)
-    ax4.plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{3,true}$',color=c3,linewidth=lwidth+3,dashes=dash)
-    #ax4.plot(t[:ii],disturb[:ii,3],label=r'$True (x)$',color=c1,linewidth=lwidth+3,dashes=dash)
-    #ax4.plot(t[:ii],disturb[:ii,4],label=r'$True (y)$',color=c2,linewidth=lwidth+3,dashes=dash)
-    #ax4.plot(t[:ii],disturb[:ii,5],label=r'$True (z)$',color=c3,linewidth=lwidth+3,dashes=dash)
+    #ax4.plot(t[:ii],theta[0]*np.ones((ii,)),label=r'$\theta _{1,true}$',color=c1,linewidth=lwidth+3,dashes=dash)
+    #ax4.plot(t[:ii],theta[1]*np.ones((ii,)),label=r'$\theta _{2,true}$',color=c2,linewidth=lwidth+3,dashes=dash)
+    #ax4.plot(t[:ii],theta[2]*np.ones((ii,)),label=r'$\theta _{3,true}$',color=c3,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],disturb[:ii,3],label=r'$True (x)$',color=c1,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],disturb[:ii,4],label=r'$True (y)$',color=c2,linewidth=lwidth+3,dashes=dash)
+    ax4.plot(t[:ii],disturb[:ii,5],label=r'$True (z)$',color=c3,linewidth=lwidth+3,dashes=dash)
     #ax4.plot(t[:ii],force_est[:ii,0],label=r'$Estimated (x)$',linewidth=lwidth+1,color=c4)
     #ax4.plot(t[:ii],force_est[:ii,1],label=r'$Estimated (y)$',linewidth=lwidth+1,color=c5)
     #ax4.plot(t[:ii],force_est[:ii,2],label=r'$Estimated (z)$',linewidth=lwidth+1,color=c6)
@@ -660,356 +691,3 @@ plt.show()
 # fig6.savefig(filepath+"ShootTheGap_ThetaHats_RegX.eps",bbox_inches='tight',dpi=300)
 # fig6.savefig(filepath+"ShootTheGap_ThetaHats_RegX.png",bbox_inches='tight',dpi=300)
 
-
-
-######################################################################################################
-######################################################################################################
-########################################### Retired Plots ############################################
-######################################################################################################
-######################################################################################################
-
-# #################################################
-# ### U,V,W Plots ###
-# fig11 = plt.figure(figsize=(8,8))
-# ax2a  = fig11.add_subplot(311)
-# set_edges_black(ax2a)
-# ax2a.plot(t[:ii],x[:ii,3],label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax2a.set(ylabel='u',title='Body-Fixed Velocities')
-# for item in ([ax2a.title, ax2a.xaxis.label, ax2a.yaxis.label] +
-#              ax2a.get_xticklabels() + ax2a.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2a.legend(fancybox=True)
-# ax2a.grid(True,linestyle='dotted',color='white')
-
-# ax2b  = fig11.add_subplot(312)
-# set_edges_black(ax2b)
-# ax2b.plot(t[:ii],x[:ii,4],label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax2b.set(ylabel='v')
-# for item in ([ax2b.title, ax2b.xaxis.label, ax2b.yaxis.label] +
-#              ax2b.get_xticklabels() + ax2b.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2b.legend(fancybox=True)
-# ax2b.grid(True,linestyle='dotted',color='white')
-
-# ax2c  = fig11.add_subplot(313)
-# set_edges_black(ax2c)
-# ax2c.plot(t[:ii],x[:ii,5],label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax2c.set(xlabel='Time (sec)',ylabel='w')
-# for item in ([ax2c.title, ax2c.xaxis.label, ax2c.yaxis.label] +
-#              ax2c.get_xticklabels() + ax2c.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2c.legend(fancybox=True)
-# ax2c.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=2.0)
-
-
-# ############################################
-# ### phi, theta, psi Trajectories ###
-# fig100 = plt.figure(figsize=(8,8))
-# ax2a  = fig100.add_subplot(311)
-# set_edges_black(ax2a)
-# ax2a.plot(t[:ii],x[:ii,6],label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax2a.set(ylabel=r'$\phi$')#,title='Control Inputs')
-# for item in ([ax2a.title, ax2a.xaxis.label, ax2a.yaxis.label] +
-#              ax2a.get_xticklabels() + ax2a.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2a.legend(fancybox=True)
-# ax2a.grid(True,linestyle='dotted',color='white')
-
-# ax2b  = fig100.add_subplot(312)
-# set_edges_black(ax2b)
-# ax2b.plot(t[:ii],x[:ii,7],label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax2b.set(xlabel='Time (sec)',ylabel=r'$\theta$')
-# for item in ([ax2b.title, ax2b.xaxis.label, ax2b.yaxis.label] +
-#              ax2b.get_xticklabels() + ax2b.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2b.legend(fancybox=True)
-# ax2b.grid(True,linestyle='dotted',color='white')
-
-# ax2c  = fig100.add_subplot(313)
-# set_edges_black(ax2c)
-# ax2c.plot(t[:ii],x[:ii,8],label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax2c.set(xlabel='Time (sec)',ylabel=r'$\psi$')
-# for item in ([ax2c.title, ax2c.xaxis.label, ax2c.yaxis.label] +
-#              ax2c.get_xticklabels() + ax2c.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2c.legend(fancybox=True)
-# ax2c.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=2.0)
-
-
-
-
-# ############################################
-# ### PE, PN, H Trajectories ###
-# fig10 = plt.figure(figsize=(8,8))
-# ax2a  = fig10.add_subplot(311)
-# set_edges_black(ax2a)
-# ax2a.plot(t[:ii],x[:ii,0],label='PRO',linewidth=lwidth,color=colors[ecc])
-# # ax2a.plot(t[:ii],XS(t[:ii])[0],label='SPHERE',linewidth=lwidth,color=colors[ecc+1])
-# ax2a.set(ylabel='X',title='Position Trajectories')#,title='Control Inputs')
-# for item in ([ax2a.title, ax2a.xaxis.label, ax2a.yaxis.label] +
-#              ax2a.get_xticklabels() + ax2a.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2a.legend(fancybox=True)
-# ax2a.grid(True,linestyle='dotted',color='white')
-
-# ax2b  = fig10.add_subplot(312)
-# set_edges_black(ax2b)
-# ax2b.plot(t[:ii],x[:ii,1],label='PRO',linewidth=lwidth,color=colors[ecc])
-# # ax2b.plot(t[:ii],XS(t[:ii])[1],label='SPHERE',linewidth=lwidth,color=colors[ecc+1])
-# ax2b.set(ylabel='Y')
-# for item in ([ax2b.title, ax2b.xaxis.label, ax2b.yaxis.label] +
-#              ax2b.get_xticklabels() + ax2b.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2b.legend(fancybox=True)
-# ax2b.grid(True,linestyle='dotted',color='white')
-
-# ax2c  = fig10.add_subplot(313)
-# set_edges_black(ax2c)
-# ax2c.plot(t[:ii],x[:ii,2],label='PRO',linewidth=lwidth,color=colors[ecc])
-# # ax2c.plot(t[:ii],XS(t[:ii])[2],label='SPHERE',linewidth=lwidth,color=colors[ecc+1])
-# ax2c.set(xlabel='Time (sec)',ylabel='Z')
-# for item in ([ax2c.title, ax2c.xaxis.label, ax2c.yaxis.label] +
-#              ax2c.get_xticklabels() + ax2c.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2c.legend(fancybox=True)
-# ax2c.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=2.0)
-
-
-#####################
-### CLF Evolution ###
-# fig1 = plt.figure(figsize=(7,7))
-
-# ax1  = fig1.add_subplot(111)
-# ax1.spines['bottom'].set_color('#000000')
-# ax1.spines['top'].set_color('#000000')
-# ax1.spines['right'].set_color('#000000')
-# ax1.spines['left'].set_color('#000000')
-
-# ax1.plot(t[1:ii],clf_val[1:ii,ecc],dashes=dash,label='PRO',linewidth=lwidth,color=colors[ecc])
-# ax1.legend(fancybox=True)
-# ax1.set(xlabel='Time (sec)',ylabel='V(x)')
-# ax1.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=0.5)
-# # plt.show()
-
-#######################
-### Delta Evolution ###
-# fig2 = plt.figure(figsize=(7,7))
-
-# ax1  = fig2.add_subplot(111)
-# ax1.spines['bottom'].set_color('#000000')
-# ax1.spines['top'].set_color('#000000')
-# ax1.spines['right'].set_color('#000000')
-# ax1.spines['left'].set_color('#000000')
-
-# ax1.plot(t[1:ii],sols[1:ii,ecc,5],label='d1',linewidth=lwidth,color=colors[ecc+1])
-# ax1.plot(t[1:ii],sols[1:ii,ecc,6],label='d2',linewidth=lwidth,color=colors[ecc+2])
-# ax1.plot(t[1:ii],sols[1:ii,ecc,4],label='d0',linewidth=lwidth,color=colors[ecc])
-# ax1.legend(fancybox=True)
-# ax1.set(xlabel='Time (sec)',ylabel='Deltas')
-# ax1.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=0.5)
-# # plt.show()
-
-############################################
-### State, Control, and CBF Trajectories ###
-# plt.close('all')
-# fig3 = plt.figure(figsize=(8,8))
-# # grid = plt.GridSpec(2,3,hspace=0.2,wspace=0.2)
-
-# ax1  = fig3.add_subplot(111)
-# ax1.spines['bottom'].set_color('#000000')
-# ax1.spines['top'].set_color('#000000')
-# ax1.spines['right'].set_color('#000000')
-# ax1.spines['left'].set_color('#000000')
-
-
-# xx1   = np.linspace(OBS_X1-OBS_R,OBS_X1+OBS_R,1000)
-# yy1a  = OBS_Y1 + np.sqrt(OBS_R**2 * (1 - ((xx1 - OBS_X1)/OBS_R)**2))
-# yy1b  = OBS_Y1 - np.sqrt(OBS_R**2 * (1 - ((xx1 - OBS_X1)/OBS_R)**2))
-
-# xx2   = np.linspace(OBS_X2-OBS_R,OBS_X2+OBS_R,1000)
-# yy2a  = OBS_Y2 + np.sqrt(OBS_R**2 * (1 - ((xx2 - OBS_X2)/OBS_R)**2))
-# yy2b  = OBS_Y2 - np.sqrt(OBS_R**2 * (1 - ((xx2 - OBS_X2)/OBS_R)**2))
-
-# ax1.plot(xx1,yy1a,color='k',linewidth=lwidth+2)
-# ax1.plot(xx1,yy1b,color='k',linewidth=lwidth+2)
-# ax1.plot(xx1,yy2a,color='k',linewidth=lwidth+2)
-# ax1.plot(xx1,yy2b,color='k',linewidth=lwidth+2,label='Barrier')
-# ax1.plot(0,0,'o',markersize=20,color='r')
-# ax1.plot(0,0,'o',markersize=10,color='w')
-# ax1.plot(0,0,'o',markersize=5,color='r',label='Goal')
-# ax1.plot(5,0,'*',markersize=20,color='b',label=r'$z_0$')
-# # ax1.plot(x[:ii,tay,0],x[:ii,tay,1],label='TAY',linewidth=lwidth,color=colors[tay])
-# # ax1.plot(x[:ii,bla,0],x[:ii,bla,1],label='BLA',linewidth=lwidth,color=colors[bla])
-# # ax1.plot(x[:ii,lop,0],x[:ii,lop,1],label='LOP',linewidth=lwidth,color=colors[lop])
-# # ax1.plot(x[:ii,lsm,0],x[:ii,lsm,1],label='LSM',linewidth=lwidth,color=colors[lsm])
-# # ax1.plot(x[:ii,zha,0],x[:ii,zha,1],label='ZHA',linewidth=lwidth,color=colors[zha])
-# ax1.plot(x[:ii,ecc,0],x[:ii,ecc,1],label='PRO',linewidth=3,color=colors[ecc])
-# for item in ([ax1.title, ax1.xaxis.label, ax1.yaxis.label] +
-#              ax1.get_xticklabels() + ax1.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax1.legend(fancybox=True)
-# ax1.set(xlabel=r'$x$')#,title='State Trajectories')
-# ax1.set_ylabel(r'$y$',rotation=90)
-# ax1.set_ylim([-2.5,2.5])
-# ax1.grid(True,linestyle='dotted',color='white')
-
-# ax1inset = inset_axes(ax1,width="100%",height="100%",
-#                       bbox_to_anchor=(.45, .05, .5, .35),bbox_transform=ax1.transAxes, loc=3)
-# ax1inset.spines['bottom'].set_color('#000000')
-# ax1inset.spines['top'].set_color('#000000')
-# ax1inset.spines['right'].set_color('#000000')
-# ax1inset.spines['left'].set_color('#000000')
-# ax1inset.plot(xx1,yy1a,color='k',linewidth=5)
-# ax1inset.plot(xx1,yy1b,color='k',linewidth=5)
-# ax1inset.plot(xx1,yy2a,color='k',linewidth=5)
-# ax1inset.plot(xx1,yy2b,color='k',linewidth=5)
-# # ax1inset.plot(x[:ii,tay,0],x[:ii,tay,1],label='TAY',linewidth=lwidth,color=colors[tay])
-# # ax1inset.plot(x[:ii,bla,0],x[:ii,bla,1],label='BLA',linewidth=lwidth,color=colors[bla])
-# # ax1inset.plot(x[:ii,lop,0],x[:ii,lop,1],label='LOP',linewidth=lwidth,color=colors[lop])
-# # ax1inset.plot(x[:ii,lsm,0],x[:ii,lsm,1],label='LSM',linewidth=lwidth,color=colors[lsm])
-# # ax1inset.plot(x[:ii,zha,0],x[:ii,zha,1],label='ZHA',linewidth=lwidth,color=colors[zha])
-# ax1inset.plot(x[:ii,ecc,0],x[:ii,ecc,1],dashes=dash,label='PRO',linewidth=3,color=colors[ecc])
-# ax1inset.set_xlim(0.75,1.25)
-# ax1inset.set_ylim(-1.05,-0.95)
-# ax1inset.set_xticklabels([])
-# ax1inset.set_yticklabels([])
-# # ax3inset.spines.set_edgecolor('black')
-# # ax3inset.spines.set_linewidth(1)
-# ax1inset.grid(True,linestyle='dotted',color='white')
-# mark_inset(ax1,ax1inset,loc1=2,loc2=3,fc="none",ec="0.2",lw=1.5)#,ls="--")
-
-# plt.tight_layout(pad=2.0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# #######################
-# ### Delta Evolution ###
-# fig2 = plt.figure(figsize=(7,7))
-
-# ax1  = fig2.add_subplot(111)
-# set_edges_black(ax1)
-
-
-# ax1.plot(t[1:ii],sols[1:ii,ecc,5],label='p1',linewidth=lwidth,color=colors[ecc])
-# # ax1.plot(t[1:ii],sols[1:ii,ecc,6],label='p2',linewidth=lwidth,color=colors[ecc+1])
-# # ax1.plot(t[1:ii],sols[1:ii,ecc,7],label='p3',linewidth=lwidth,color=colors[ecc+2])
-# ax1.legend(fancybox=True)
-# ax1.set(xlabel='Time (sec)',ylabel='Deltas')
-# ax1.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=0.5)
-# plt.show()
-
-
-
-
-# fig5 = plt.figure(figsize=(8,8))
-# ax3  = fig5.add_subplot(111)
-# set_edges_black(ax3)
-# ax3.plot(t[1:ii],np.min(cbf_val[1:ii,ecc],axis=-1),dashes=dash,label=r'$PRO$',linewidth=lwidth,color=colors[ecc])
-# ax3.set(xlabel='Time (sec)',ylabel='h(x)')#,title='CBFs')
-# ax3.set(xlim=[-0.5,6.5],ylim=[-1,20])
-# for item in ([ax3.title, ax3.xaxis.label, ax3.yaxis.label] +
-#              ax3.get_xticklabels() + ax3.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax3.legend(fancybox=True,loc=1)
-# ax3.grid(True,linestyle='dotted',color='white')
-
-# ax3inset = inset_axes(ax3,width="100%",height="100%",
-#                       bbox_to_anchor=(.45, .1, .5, .35),bbox_transform=ax3.transAxes, loc=3)
-# ax3inset.spines['bottom'].set_color('#000000')
-# ax3inset.spines['top'].set_color('#000000')
-# ax3inset.spines['right'].set_color('#000000')
-# ax3inset.spines['left'].set_color('#000000')
-# ax3inset.plot(t[1:ii],np.zeros(t[1:ii].shape),label=r'Boundary',linewidth=lwidth,color='k')
-# # ax3inset.plot(t[1:ii],np.min(cbf_val[1:ii,tay],axis=-1),label=r'$TAY$',linewidth=3,color=colors[tay])
-# # ax3inset.plot(t[1:ii],np.min(cbf_val[1:ii,bla],axis=-1),label=r'$BLA$',linewidth=3,color=colors[bla])
-# # ax3inset.plot(t[1:ii],np.min(cbf_val[1:ii,lop],axis=-1),label=r'$LOP$',linewidth=3,color=colors[lop])
-# # ax3inset.plot(t[1:ii],np.min(cbf_val[1:ii,lsm],axis=-1),label=r'$LSM$',linewidth=3,color=colors[lsm])
-# # ax3inset.plot(t[1:ii],np.min(cbf_val[1:ii,zha],axis=-1),label=r'$ZHA$',linewidth=3,color=colors[zha])
-# ax3inset.plot(t[1:ii],np.min(cbf_val[1:ii,ecc],axis=-1),dashes=dash,label=r'$PRO$',linewidth=3,color=colors[ecc])
-# ax3inset.set_xlim(0.75,4.1)
-# ax3inset.set_ylim(-0.01,0.18)
-# ax3inset.set_xticklabels([])
-# ax3inset.set_yticklabels([0.00,0.00,0.05,0.10])
-# # ax3inset.spines.set_edgecolor('black')
-# # ax3inset.spines.set_linewidth(1)
-# ax3inset.grid(True,linestyle='dotted',color='white')
-# mark_inset(ax3,ax3inset,loc1=2,loc2=4,fc="none",ec="0.2",lw=1.5)#,ls="--")
-# plt.draw()
-
-# plt.tight_layout(pad=2.0)
-
-# fig3.savefig(filepath+"ShootTheGap_allFxTS_Trajectories_RegX.eps",bbox_inches='tight',dpi=300,pad_inches=0.5)
-# fig1.savefig(filepath+"ShootTheGap_allFxTS_Trajectories_RegX.png",bbox_inches='tight',dpi=300,pad_inches=0.5)
-# fig4.savefig(filepath+"ShootTheGap_allFxTS_Controls_RegX.eps",bbox_inches='tight',dpi=300,pad_inches=0.5)
-# fig2.savefig(filepath+"ShootTheGap_allFxTS_Controls_RegX.png",bbox_inches='tight',dpi=300,pad_inches=0.5)
-# fig5.savefig(filepath+"ShootTheGap_allFxTS_CBFs_RegX.eps",bbox_inches='tight',dpi=300,pad_inches=0.5)
-# fig3.savefig(filepath+"ShootTheGap_allFxTS_CBFs_RegX.png",bbox_inches='tight',dpi=300,pad_inches=0.5)
-
-
-# #################################################
-# ### XYZ in Sphere Plots ###
-# xx1   = np.linspace(-1,1,1000)
-# yy1a  = np.sqrt(1 - xx1**2)
-# yy1b  = -np.sqrt(1 - xx1**2)
-
-# fig101 = plt.figure(figsize=(8,8))
-# ax2a  = fig101.add_subplot(311)
-# set_edges_black(ax2a)
-# ax2a.plot(x[:ii,ecc,0] - XS(t[:ii])[0],x[:ii,ecc,1] - XS(t[:ii])[1],label='XY',linewidth=lwidth,color=colors[ecc])
-# ax2a.plot(xx1,yy1a,linewidth=lwidth,color='k')
-# ax2a.plot(xx1,yy1b,linewidth=lwidth,color='k')
-# ax2a.set(xlabel='X',ylabel='Y')#,title='Control Inputs')
-# for item in ([ax2a.title, ax2a.xaxis.label, ax2a.yaxis.label] +
-#              ax2a.get_xticklabels() + ax2a.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2a.legend(fancybox=True)
-# ax2a.grid(True,linestyle='dotted',color='white')
-
-# ax2b  = fig101.add_subplot(312)
-# set_edges_black(ax2b)
-# ax2b.plot(x[:ii,ecc,2] - XS(t[:ii])[2],x[:ii,ecc,0] - XS(t[:ii])[0],label='ZX',linewidth=lwidth,color=colors[ecc])
-# ax2b.plot(xx1,yy1a,linewidth=lwidth,color='k')
-# ax2b.plot(xx1,yy1b,linewidth=lwidth,color='k')
-# ax2b.set(xlabel='Z',ylabel='X')
-# for item in ([ax2b.title, ax2b.xaxis.label, ax2b.yaxis.label] +
-#              ax2b.get_xticklabels() + ax2b.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2b.legend(fancybox=True)
-# ax2b.grid(True,linestyle='dotted',color='white')
-
-# ax2c  = fig101.add_subplot(313)
-# set_edges_black(ax2c)
-# ax2c.plot(x[:ii,ecc,1] - XS(t[:ii])[1],x[:ii,ecc,2] - XS(t[:ii])[2],label='YZ',linewidth=lwidth,color=colors[ecc])
-# ax2c.plot(xx1,yy1a,linewidth=lwidth,color='k')
-# ax2c.plot(xx1,yy1b,linewidth=lwidth,color='k')
-# ax2c.set(xlabel='Y',ylabel='Z')
-# for item in ([ax2c.title, ax2c.xaxis.label, ax2c.yaxis.label] +
-#              ax2c.get_xticklabels() + ax2c.get_yticklabels()):
-#     item.set_fontsize(25)
-# ax2c.legend(fancybox=True)
-# ax2c.grid(True,linestyle='dotted',color='white')
-
-# plt.tight_layout(pad=2.0)

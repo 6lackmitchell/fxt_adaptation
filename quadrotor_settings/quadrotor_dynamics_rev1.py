@@ -165,6 +165,7 @@ def regressor(x):
                         [          0,          0,np.exp(a33)]]) * 10
 
         reg = np.concatenate([np.zeros((3,3)),reg,np.zeros((6,3))])
+        reg = np.concatenate([np.zeros((3,3)),np.eye(3),np.zeros((6,3))])
 
     else:
         pass

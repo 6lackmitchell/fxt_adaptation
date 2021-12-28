@@ -1,34 +1,7 @@
 import numpy as np
+from .control_params import *
 from .physical_params import *
-from .state_derivatives import *
 
-# CX = 0.0
-# PX = 10.0
-# NX = 4
-
-# CY = 0.0
-# PY = 10.0
-# NY = 4
-
-CXo = 0.0
-PXo = 12.0
-NXo = 2
-
-CYo = 0.0
-PYo = 12.0
-NYo = 2
-
-CXi = 0.0
-PXi = 3.0
-NXi = 2
-
-CYi = 0.0
-PYi = 3.0
-NYi = 2
-
-CZ = 2.25
-PZ = 2.5
-NZ = 2
 
 def cbf(x):
     return np.array([cbf_altitude(x),cbf_attitude(x),cbf_velx(x),cbf_vely(x),cbf_velz(x)])

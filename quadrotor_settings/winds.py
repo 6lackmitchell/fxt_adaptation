@@ -96,6 +96,11 @@ windu_interp = rgi((xx,yy,zz),wind_u / SCALE)
 windv_interp = rgi((xx,yy,zz),wind_v / SCALE)
 windw_interp = rgi((xx,yy,zz),wind_w / SCALE)
 
+# Constant Winds
+WIND_X =  4.0
+WIND_Y =  5.0
+WIND_Z = -2.0
+
 if __name__ == "__main__":
     print(np.max(abs(wind_u)))
     print(np.max(abs(wind_v)))

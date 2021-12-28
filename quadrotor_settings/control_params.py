@@ -22,7 +22,10 @@ POWER    = 1
 kB       = 1
 
 F_DECISION_VARS   = [{'name':'F',   'lb':0.0,    'ub':F_MAX},
-                     {'name':'a0',  'lb':1.0,    'ub':1e+6}]
+                     {'name':'a0',  'lb':1.0,    'ub':1e+6},
+                     {'name':'a1',  'lb':1.0,    'ub':1e+6},
+                     {'name':'a2',  'lb':1.0,    'ub':1e+6},
+                     {'name':'a3',  'lb':1.0,    'ub':1e+6}]
 
 a0ub = 1e+6
 a1ub = 1e+4
