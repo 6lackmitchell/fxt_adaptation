@@ -1,5 +1,5 @@
 # fxt_adaptation
-> This project seeks to reduce conservatism in safety-critical controllers by learning the unknown parameters in a parameter-affine controlled dynamical system within a fixed-time (FxT) independent of the initial parameter estimates. The theoretical results of this research were developed as a collaborative effort between myself, my advisor Dimitra Panagou, and Dr. Ehsan Arabi of Ford Motor Company. The provided code demonstrates the viability of our theoretical contributions both in simulation and via hardware experimentation with case studies on a quadrotor in a wind field.
+> This project seeks to reduce conservatism in safety-critical controllers by learning the unknown parameters in a parameter-affine controlled dynamical system within a fixed-time (FxT) independent of the initial parameter estimates. The theoretical results of this research were developed as a collaborative effort between myself, my advisor Dimitra Panagou, and Dr. Ehsan Arabi of Ford Motor Company. The provided code demonstrates the viability of our theoretical contributions both in simulation with case studies on a quadrotor in a wind field.
 <hr>
 
 # Table of Contents
