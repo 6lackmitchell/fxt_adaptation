@@ -28,27 +28,49 @@ global ESTIMATOR
 ESTIMATOR = None
 
 
-mu_e      = 5
-c1_e      = 50
-c2_e      = 50
-k_e       = 0.001
-l_e       = 100
-gamma1_e  = 1 - 1/mu_e
-gamma2_e  = 1 + 1/mu_e
-T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
-kG        = 1.2 # Must be greater than 1
+# mu_e      = 5
+# c1_e      = 50
+# c2_e      = 50
+# k_e       = 0.001
+# l_e       = 100
+# gamma1_e  = 1 - 1/mu_e
+# gamma2_e  = 1 + 1/mu_e
+# T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
+# kG        = 1.2 # Must be greater than 1
 
-mu_e      = 2
-c1_e      = 4
-c2_e      = 4
-k_e       = 0.0002
-l_e       = 25.0
+# mu_e      = 2
+# c1_e      = 4
+# c2_e      = 4
+# k_e       = 0.0002
+# l_e       = 25.0
+# gamma1_e  = 1 - 1/mu_e
+# gamma2_e  = 1 + 1/mu_e
+# T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
+# kG        = 1.1 # Must be greater than 1
+# Kw        = 165
+# # Kw        = 1.0
+
+# From safe_fxts_adaptation
+mu_e     = 5
+c1_e     = 50
+c2_e     = 50
+l_e      = 20
+kG       = 1.1 # Must be greater than 1
 gamma1_e  = 1 - 1/mu_e
 gamma2_e  = 1 + 1/mu_e
 T_e       = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
-kG        = 1.1 # Must be greater than 1
-Kw        = 165
-# Kw        = 1.0
+
+# From safe_fxts_adaptation
+mu_e     = 5
+c1_e     = 5
+c2_e     = 5
+l_e      = 5
+l_e      = 10
+kG       = 2 # Must be greater than 1
+gamma1_e = 1 - 1/mu_e
+gamma2_e = 1 + 1/mu_e
+T_e      = 1 / (c1_e * (1 - gamma1_e)) + 1 / (c2_e * (gamma2_e - 1))
+
 
 ###############################################################################
 ################################## Functions ##################################
@@ -90,6 +112,7 @@ class Estimator():
         self.theta    = None
         self.thetaMax = None
         self.thetaMin = None
+        self.sigmaMin = None
 
     def set_initial_conditions(self,**settings):
         """ """
@@ -100,6 +123,7 @@ class Estimator():
         self.thetaHat = thetaHat
         self.thetaMax = thetaMax
         self.thetaMin = thetaMin
+        self.sigmaMin = 0
 
         if 'x0' in settings.keys():
             assert type(settings['x0']) == np.ndarray
@@ -221,10 +245,10 @@ class Estimator():
         self.u = u
 
         if t == 0:
-            return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta
+            return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta,self.sigmaMin
 
         # Update Unknown Parameter Estimates
-        self.update_unknown_parameter_estimates(law=2)
+        self.update_unknown_parameter_estimates(law=3)
 
         # Update state estimate using observer dynamics
         self.update_observer()
@@ -232,7 +256,7 @@ class Estimator():
         # Update theta_tilde upper/lower bounds
         self.update_error_bounds(self.t)
 
-        return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta
+        return self.thetaHat,self.errMax,self.etaTerms,self.Gamma,self.xHat,self.theta,self.sigmaMin
 
     def update_unknown_parameter_estimates(self,law=1):
         """
@@ -273,6 +297,22 @@ class Estimator():
                 print("ThetaHat: {}".format(self.thetaHat))
                 raise ValueError("W Norm Zero")
 
+        elif law == 3:
+            # Predictor
+            self.sigmaMin = self.update_auxiliaries()
+
+            v = self.e
+            M = self.W
+
+            norm_v = np.linalg.norm(v)
+
+            # Update theta_hat
+            self.thetaHatDot  = self.Gamma @ M.T @ v * (c1_e * norm_v**(2 / mu_e) + c2_e*norm_v**(-2 / mu_e))
+
+        elif law == 4: # No Estimation
+            # Update theta_hat
+            self.thetaHatDot  = np.zeros(self.thetaHat.shape)
+
         thd_norm      = np.linalg.norm(self.thetaHatDot)
         if thd_norm >= tol and not (np.isnan(thd_norm) or np.isinf(thd_norm)):
             self.thetaHat = self.thetaHat + (self.dt * self.thetaHatDot)
@@ -296,34 +336,52 @@ class Estimator():
         float -- minimum eigenvalue of P matrix
 
         """
-        Wdot   = -Kw * self.W + regressor(self.x)
-        # xi_dot = -Kw * self.xi
+        # zdot   = f(self.x) + np.dot(g(self.x),self.u) + np.dot(regressor(self.x,self.t),self.theta_hat) + l_e*(self.x - self.z) + np.dot(self.W,self.theta_hat_dot)
+        Wdot   = -l_e*self.W + regressor(self.x)
 
-        self.W  = self.W  + (self.dt * Wdot)
-        # self.xi = self.xi + (self.dt * xi_dot)
+        # self.z = self.z + (self.dt * zdot)
+        self.W = self.W + (self.dt * Wdot)
 
-        # Pdot = -l_e * self.P + np.dot(self.W.T,self.W)
-        # Qdot = -l_e * self.Q + np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+        return np.min(np.linalg.svd(self.W)[1])
 
-        # Pdot = np.dot(self.W.T,self.W)
-        # Qdot = np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+    # def update_auxiliaries(self):
+    #     """ Updates the auxiliary matrix and vector for the filtering scheme.
 
-        # print("W:  {}".format(self.W))
-        # print("e:  {}".format(self.e))
-        # print("xi: {}".format(self.xi))
+    #     INPUTS:
+    #     None
 
-        # self.P = self.P + (self.dt * Pdot)
-        # self.Q = self.Q + (self.dt * Qdot)
+    #     OUTPUTS:
+    #     float -- minimum eigenvalue of P matrix
 
-        norm_chk = np.linalg.norm(self.P)
-        if np.isnan(norm_chk) or np.isinf(norm_chk):
-            raise ValueError("P Norm out of bounds")
+    #     """
+    #     Wdot   = -Kw * self.W + regressor(self.x)
+    #     # xi_dot = -Kw * self.xi
 
-        norm_chk = np.linalg.norm(self.Q)
-        if np.isnan(norm_chk) or np.isinf(norm_chk):
-            raise ValueError("Q Norm out of bounds")
+    #     self.W  = self.W  + (self.dt * Wdot)
+    #     # self.xi = self.xi + (self.dt * xi_dot)
 
-        return 1#np.min(np.linalg.eig(self.P)[0])
+    #     # Pdot = -l_e * self.P + np.dot(self.W.T,self.W)
+    #     # Qdot = -l_e * self.Q + np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+
+    #     # Pdot = np.dot(self.W.T,self.W)
+    #     # Qdot = np.dot(self.W.T,(self.W@self.thetaHat + self.e - self.xi))
+
+    #     # print("W:  {}".format(self.W))
+    #     # print("e:  {}".format(self.e))
+    #     # print("xi: {}".format(self.xi))
+
+    #     # self.P = self.P + (self.dt * Pdot)
+    #     # self.Q = self.Q + (self.dt * Qdot)
+
+    #     norm_chk = np.linalg.norm(self.P)
+    #     if np.isnan(norm_chk) or np.isinf(norm_chk):
+    #         raise ValueError("P Norm out of bounds")
+
+    #     norm_chk = np.linalg.norm(self.Q)
+    #     if np.isnan(norm_chk) or np.isinf(norm_chk):
+    #         raise ValueError("Q Norm out of bounds")
+
+    #     return 1#np.min(np.linalg.eig(self.P)[0])
 
     def update_observer(self):
         """ Updates the state estimate according to the observer (xhat) dynamics.
@@ -337,7 +395,7 @@ class Estimator():
         None
 
         """
-        xHatDot = f(self.x) + g(self.x)@self.u + regressor(self.x)@self.thetaHat + Kw*self.e + self.W@self.thetaHatDot
+        xHatDot = f(self.x) + g(self.x)@self.u + regressor(self.x)@self.thetaHat + l_e*self.e + self.W@self.thetaHatDot
         # print("ThetaHatDot: {}".format(self.thetaHatDot))
         # print("xHatDot: {}".format(xHatDot))
         self.xHat = self.xHat + (self.dt * xHatDot)
@@ -348,6 +406,8 @@ class Estimator():
         # Update Max Error Quantities
         arc_tan      = np.arctan2(np.sqrt(c2_e) * self.V0**(1/mu_e),np.sqrt(c1_e))
         tan_arg      = -np.min([t,self.T_e]) * np.sqrt(c1_e * c2_e) / mu_e + arc_tan
+        # tan_arg      = -np.min([0,self.T_e]) * np.sqrt(c1_e * c2_e) / mu_e + arc_tan # For robust safety
+        # tan_arg      = 0 # For no treatment of uncertainty
         Vmax         = (np.sqrt(c1_e / c2_e) * np.tan(np.max([tan_arg,0]))) ** mu_e
         self.Vmax    = np.clip(Vmax,0,np.inf)
 
@@ -382,15 +442,12 @@ class Estimator():
         eta2dot = -2*A**2*B*(np.tan(tan_arg)**2 + 1)*np.tan(tan_arg)
         eta3dot = -2*A**3*B*(np.tan(tan_arg)**2 + 1)**2 - 4*A**3*B*(np.tan(tan_arg)**2 + 1)*np.tan(tan_arg)**2
         eta4dot = -16*A**4*B*(np.tan(tan_arg)**2 + 1)**2*np.tan(tan_arg) - 8*A**4*B*(np.tan(tan_arg)**2 + 1)*np.tan(tan_arg)**3
-        # print(N*c*np.sqrt(M*(np.tan(tan_arg)/N)**u)*(np.tan(tan_arg)**2 + 1)/(2*np.tan(tan_arg)))
-        # print(N*c*np.sqrt(M*(np.tan(tan_arg)/N)**u))
-        # print((np.tan(tan_arg)**2 + 1))
-        # print((2*np.tan(tan_arg)))
-        # print(M*(np.tan(tan_arg)/N)**u)
-        # print(etadot)
-        # print(eta2dot)
-        # print(eta3dot)
-        # print(eta4dot)
+
+        # # For no estimation
+        # etadot  = 0
+        # eta2dot = 0
+        # eta3dot = 0
+        # eta4dot = 0
 
         # Update etadot terms
         self.eta_order1 = np.trace(np.linalg.inv(self.Gamma)) * (self.eta * etadot)

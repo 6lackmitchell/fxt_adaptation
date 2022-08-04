@@ -39,8 +39,11 @@ __email__      = "mblackjr@umich.edu"
 __status__     = "Development"
 
 # Output file
-filepath = '/home/dasc/MB/sim_data/fxt_adaptation/quadrotor/'
-filename = filepath + 'NEW_ESTIMATOR.pkl'
+# filepath = '/home/dasc/MB/sim_data/fxt_adaptation/quadrotor/'
+filepath = '/Users/mblack/Documents/git/fxt_adaptation/datastore/quadrotor/'
+# filename = filepath + 'NO_ESTIMATOR_CONSTANTWIND.pkl'
+filename = filepath + 'ESTIMATOR_CONSTANTWIND.pkl'
+# filename = filepath + 'ESTIMATOR_CONSTANTWIND_PLUSGUST.pkl'
 
 # Logging variables
 x             = np.zeros((nTimesteps,nStates))
@@ -52,6 +55,7 @@ thetainv      = np.zeros((nTimesteps,nParams))
 qp_sol        = np.zeros((nTimesteps,nSols))
 nominal_sol   = np.zeros((nTimesteps,nSols))
 cbfs          = np.zeros((nTimesteps,nCBFs))
+sigmaMin      = np.zeros((nTimesteps,))
 xf            = np.zeros((nTimesteps,nStates))
 clf           = np.zeros((nTimesteps,))
 
@@ -66,7 +70,7 @@ try:
             print("Time: {} sec".format(tt))
 
         # Compute new parameter estimate
-        thetahat[ii],errMax,etaTerms,Gamma,state_f,thetainv[ii] = adaptation_law(dt,tt,x[ii],u)
+        thetahat[ii],errMax,etaTerms,Gamma,state_f,thetainv[ii],sigmaMin[ii] = adaptation_law(dt,tt,x[ii],u)
 
         # Compute Control Input
         qp_sol[ii,:],nominal_sol[ii,:] = solve_qp({'t':        tt,
@@ -102,13 +106,19 @@ finally:
             'sols_nom':nominal_sol,
             'thetahat':thetahat,
             'thetainv':thetainv,
+            'minSigma':sigmaMin,
+            'Gamma':Gamma,
             'cbf':cbfs,
             'clf':clf,
             'xf':xf,
             'ii':ii}
 
     # Write data to file
-    with open(filename,'wb') as f:
-        pickle.dump(data,f)
+    try:
+        with open(filename,'wb') as f:
+            pickle.dump(data,f)
+    except:
+        with open('backup_file.pkl','wb') as f:
+            pickle.dump(data,f)
 
 print('\a')

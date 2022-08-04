@@ -5,6 +5,12 @@ from .initial_conditions import theta
 # Define Global trig shortcuts
 c = np.cos; s = np.sin; t = np.tan; se = lambda y: 1 / np.cos(y)
 
+# Nominal Effect of Wind on Velocity
+WU   = 10.0
+WV   = -8.0
+WW   = -5.0
+KREG =  0.03 / M
+
 def R_body_to_inertial(x):
     """ Rotation matrix from body-fixed frame to inertial frame.
 
@@ -137,20 +143,80 @@ def g(x):
         return np.array(x.shape[0]*[g])
     return g
 
+# # Wind Regressor
+# def gust_regressor(x):
+#     RR = R_body_to_inertial(x)
+#     if np.sum(x.shape) == x.shape[0]:
+#         xx,yy,zz = RR @ np.array([x[3],x[4],x[5]])
+#         # Effect of Wind on Velocity
+#         try:
+#             wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0]
+#             wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0]
+#             ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0]
+#         except:
+#             xnew = np.min([5,np.max([-5,x[0]])])
+#             ynew = np.min([5,np.max([-5,x[1]])])
+#             znew = np.min([5,np.max([-5,x[2]])])
+#             wu   = windu_interp(np.array([xnew,ynew,znew]))[0]
+#             wv   = windv_interp(np.array([xnew,ynew,znew]))[0]
+#             ww   = windw_interp(np.array([xnew,ynew,znew]))[0]
+
+
+
+#         RegA = np.array([[wu,  0,  0],
+#                          [ 0, wv,  0],
+#                          [ 0,  0, ww]])
+
+#         reg = np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))])
+
+#     else:
+#         pass
+#     return reg
+
+# Gust Regressor
+def gust_regressor(x):
+    RR = R_body_to_inertial(x)
+    if np.sum(x.shape) == x.shape[0]:
+        vx,vy,vz = RR @ np.array([x[3],x[4],x[5]])
+
+        # Effect of Gust on Velocity
+        try:
+            wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0]
+            wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0]
+            ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0]
+        except:
+            xnew = np.min([5,np.max([-5,x[0]])])
+            ynew = np.min([5,np.max([-5,x[1]])])
+            znew = np.min([5,np.max([-5,x[2]])])
+            wu   = windu_interp(np.array([xnew,ynew,znew]))[0]
+            wv   = windv_interp(np.array([xnew,ynew,znew]))[0]
+            ww   = windw_interp(np.array([xnew,ynew,znew]))[0]
+
+        rel_vel_inertial = np.array([wu+WU-vx,wv+WV-vy,ww+WW-vz])
+        rel_vel_body     = RR.T @ rel_vel_inertial
+        rv_body_norm     = np.linalg.norm(rel_vel_body)
+
+        RegA = rv_body_norm*np.diag([rel_vel_body[0],rel_vel_body[1],rel_vel_body[2]])
+
+        reg = KREG*np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))]) - regressor(x)
+
+    else:
+        pass
+    return reg
+
 # Wind Regressor
 def regressor(x):
     RR = R_body_to_inertial(x)
     if np.sum(x.shape) == x.shape[0]:
-        xx,yy,zz = RR @ np.array([x[3],x[4],x[5]])
-        # Effect of Wind on Velocity
-        wu   = windu_interp(np.array([x[0],x[1],x[2]]))[0]
-        wv   = windv_interp(np.array([x[0],x[1],x[2]]))[0]
-        ww   = windw_interp(np.array([x[0],x[1],x[2]]))[0]
-        RegA = np.array([[wu - xx,       0,       0],
-                         [      0, wv - yy,       0],
-                         [      0,       0, ww - zz]])
+        vx,vy,vz = RR @ np.array([x[3],x[4],x[5]])
 
-        reg = np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))])
+        rel_vel_inertial = np.array([WU-vx,WV-vy,WW-vz])
+        rel_vel_body     = RR.T @ rel_vel_inertial
+        rv_body_norm     = np.linalg.norm(rel_vel_body)
+
+        RegA = rv_body_norm*np.diag([rel_vel_body[0],rel_vel_body[1],rel_vel_body[2]])
+
+        reg = KREG*np.concatenate([np.zeros((3,3)),RegA,np.zeros((6,3))])
 
     else:
         pass
@@ -158,10 +224,11 @@ def regressor(x):
 
 def system_dynamics(t,x,u,theta):
     reg = regressor(x) @ theta
+    disturbance = gust_regressor(x) @ theta#(0.1*np.random.random(theta.shape))
     try:
-        xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + reg
+        xdot = f(x) + np.einsum('ijk,ik->ij',g(x),u) + reg# + disturbance
     except ValueError:
-        xdot = f(x) + np.dot(g(x),u) + reg
+        xdot = f(x) + np.dot(g(x),u) + reg# + disturbance
 
     return xdot
 

@@ -34,7 +34,9 @@ colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
-filepath = '/home/dasc/MB/sim_data/fxt_adaptation/quadrotor/'
+# filepath = '/home/dasc/MB/sim_data/fxt_adaptation/quadrotor/'
+filepath = '/Users/mblack/Documents/git/fxt_adaptation/datastore/quadrotor/'
+
 
 nControl = 1
 ecc      = 0

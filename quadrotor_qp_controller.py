@@ -123,6 +123,7 @@ def update_model(model:   gp.Model,
         model,feedback,e = update_torque_constraints(model,data,TAU_DVARS)
         if e is not None:
             print(feedback)
+            print('ok')
             # raise e
     model.update()
 
